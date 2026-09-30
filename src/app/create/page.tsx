@@ -8,6 +8,7 @@ import { ConnectButton } from "@/components/ConnectButton";
 import { ipinAbi } from "@/lib/abi";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
+import { tokenAddress, type PotToken } from "@/lib/tokens";
 
 type Row = { address: string; share: string };
 
@@ -16,6 +17,7 @@ export default function CreatePage() {
   const contract = ipinAddress();
   const { isConnected } = useAccount();
   const [name, setName] = useState("");
+  const [token, setToken] = useState<PotToken>("USDC");
   const [rows, setRows] = useState<Row[]>([
     { address: "", share: "50" },
     { address: "", share: "50" },
@@ -49,18 +51,18 @@ export default function CreatePage() {
       address: contract,
       abi: ipinAbi,
       functionName: "createPot",
-      args: [name.trim(), members as `0x${string}`[], shares],
+      args: [name.trim(), tokenAddress(token), members as `0x${string}`[], shares],
     });
   }
 
   return (
     <main className="mx-auto max-w-2xl px-5 pb-24 pt-10">
       <h1 className="font-display text-4xl sm:text-5xl">Create a pot</h1>
-      <p className="mt-3 text-mute">You become owner of this pot only. Anyone else can still make their own.</p>
+      <p className="mt-3 text-mute">One currency per pot. You own this pot only.</p>
 
       {!contract && (
         <p className="mt-6 rounded-2xl border border-laterite/30 bg-panel px-4 py-3 text-sm">
-          Set NEXT_PUBLIC_IPIN_ADDRESS after Remix deploy.
+          Set NEXT_PUBLIC_IPIN_ADDRESS after Remix deploy (constructor now needs USDC and EURC).
         </p>
       )}
 
@@ -74,6 +76,24 @@ export default function CreatePage() {
             className="mt-2 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 outline-none focus:border-laterite"
           />
         </label>
+
+        <fieldset>
+          <legend className="text-sm text-mute">Currency</legend>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            {(["USDC", "EURC"] as PotToken[]).map((sym) => (
+              <button
+                key={sym}
+                type="button"
+                onClick={() => setToken(sym)}
+                className={`h-12 rounded-2xl border text-sm font-medium ${
+                  token === sym ? "border-laterite bg-laterite/10" : "border-ink/15 bg-ground"
+                }`}
+              >
+                {sym}
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         {rows.map((row, i) => (
           <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_7rem_auto]">
@@ -109,11 +129,7 @@ export default function CreatePage() {
           </div>
         ))}
 
-        <button
-          type="button"
-          className="btn-ghost w-full"
-          onClick={() => setRows([...rows, { address: "", share: "1" }])}
-        >
+        <button type="button" className="btn-ghost w-full" onClick={() => setRows([...rows, { address: "", share: "1" }])}>
           Add member
         </button>
 
