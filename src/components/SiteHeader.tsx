@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ConnectButton } from "./ConnectButton";
+import { BrandLogo } from "./BrandLogo";
 import { FAUCET, EXPLORER } from "@/lib/chain";
 
 const DESKTOP_LINKS = [
@@ -41,8 +42,7 @@ export function SiteHeader() {
         <div className="bg-ground/90 backdrop-blur-md">
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:h-[4.25rem] sm:gap-4 sm:px-6">
             <Link href="/" className="flex min-w-0 items-center gap-2 sm:gap-2.5">
-              <img src="/logo/logo.svg" alt="" className="hidden h-8 w-8 sm:h-9 sm:w-9" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-              <ShareMark />
+              <BrandLogo />
               <span className="truncate font-display text-xl tracking-tight sm:text-2xl">Ipin</span>
             </Link>
 
@@ -132,14 +132,5 @@ export function SiteHeader() {
         </div>
       </div>
     </>
-  );
-}
-
-function ShareMark() {
-  return (
-    <svg className="h-8 w-8 shrink-0 sm:h-9 sm:w-9" viewBox="0 0 32 32" aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#2A1C12" />
-      <path d="M7 22h18v2H7zm2-3h3V10H9zm5.5 0h3V8h-3zM20 19h3V12h-3z" fill="#C45C26" />
-    </svg>
   );
 }

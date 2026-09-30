@@ -48,7 +48,7 @@ contract Ipin {
     error NotMember();
     error TransferFailed();
     error UnpaidMembers();
-    error RoundClosed();
+    error RoundNotOpen();
 
     constructor(address usdc_) {
         if (usdc_ == address(0)) revert ZeroAddress();
@@ -138,7 +138,7 @@ contract Ipin {
     function closeRound(uint256 id) external {
         Pot storage p = pots[id];
         if (msg.sender != p.owner) revert NotOwner();
-        if (!p.roundOpen) revert RoundClosed();
+        if (!p.roundOpen) revert RoundNotOpen();
         if (!_allPaid(id)) revert UnpaidMembers();
         p.roundOpen = false;
         p.round += 1;
