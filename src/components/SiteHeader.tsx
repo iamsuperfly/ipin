@@ -9,11 +9,13 @@ import { FAUCET, EXPLORER } from "@/lib/chain";
 const DESKTOP_LINKS = [
   { href: "/", label: "Home" },
   { href: "/create", label: "Create pot" },
+  { href: "/bridge", label: "Bridge USDC" },
 ];
 
 const MENU_LINKS = [
   { href: "/", label: "Home" },
   { href: "/create", label: "Create pot" },
+  { href: "/bridge", label: "Bridge USDC" },
   { href: FAUCET, label: "Get testnet USDC", external: true },
   { href: EXPLORER, label: "Explorer", external: true },
 ];
@@ -81,49 +83,22 @@ export function SiteHeader() {
       </header>
 
       <div className={`fixed inset-0 z-[80] overflow-hidden lg:hidden ${open ? "pointer-events-auto" : "pointer-events-none invisible"}`}>
-        <button
-          type="button"
-          className={`absolute inset-0 bg-ground/70 transition-opacity ${open ? "opacity-100" : "opacity-0"}`}
-          aria-label="Close menu overlay"
-          onClick={() => setOpen(false)}
-        />
-        <div
-          id="mobile-menu"
-          className={`absolute right-0 top-0 flex h-full w-[min(22rem,88vw)] flex-col bg-panel shadow-2xl transition-transform duration-300 ${
-            open ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
+        <button type="button" className={`absolute inset-0 bg-ground/70 transition-opacity ${open ? "opacity-100" : "opacity-0"}`} aria-label="Close menu overlay" onClick={() => setOpen(false)} />
+        <div id="mobile-menu" className={`absolute right-0 top-0 flex h-full w-[min(22rem,88vw)] flex-col bg-panel shadow-2xl transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}>
           <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
             <span className="font-display text-xl">Menu</span>
-            <button
-              type="button"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/15"
-              onClick={() => setOpen(false)}
-              aria-label="Close menu"
-            >
+            <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/15" onClick={() => setOpen(false)} aria-label="Close menu">
               ×
             </button>
           </div>
           <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-5 py-4" aria-label="Mobile">
             {MENU_LINKS.map((link) =>
               link.external ? (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex min-h-12 items-center rounded-xl px-3 text-base font-medium hover:bg-ground/40"
-                  onClick={() => setOpen(false)}
-                >
+                <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="flex min-h-12 items-center rounded-xl px-3 text-base font-medium hover:bg-ground/40" onClick={() => setOpen(false)}>
                   {link.label}
                 </a>
               ) : (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="flex min-h-12 items-center rounded-xl px-3 text-base font-medium hover:bg-ground/40"
-                  onClick={() => setOpen(false)}
-                >
+                <Link key={link.href} href={link.href} className="flex min-h-12 items-center rounded-xl px-3 text-base font-medium hover:bg-ground/40" onClick={() => setOpen(false)}>
                   {link.label}
                 </Link>
               ),
