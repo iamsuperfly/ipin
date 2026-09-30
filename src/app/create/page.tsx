@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { isAddress } from "viem";
+import { decodeEventLog, isAddress } from "viem";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { ConnectButton } from "@/components/ConnectButton";
 import { ipinAbi } from "@/lib/abi";
 import { ipinAddress } from "@/lib/contract";
-import { decodeEventLog } from "viem";
+import { writeErrorText } from "@/lib/errors";
 
 type Row = { address: string; share: string };
 
@@ -23,7 +23,8 @@ export default function CreatePage() {
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { data: receipt, isLoading: waiting } = useWaitForTransactionReceipt({ hash });
 
-  if (receipt) {
+  useEffect(() => {
+    if (!receipt) return;
     const created = receipt.logs
       .map((log) => {
         try {
@@ -33,11 +34,10 @@ export default function CreatePage() {
         }
       })
       .find((e) => e && e.eventName === "PotCreated");
-    const newId = created && "args" in created ? String(created.args.id) : null;
-    if (newId) {
-      router.replace(`/pot/${newId}`);
+    if (created && created.eventName === "PotCreated") {
+      router.replace(`/pot/${String(created.args.id)}`);
     }
-  }
+  }, [receipt, router]);
 
   function submit() {
     if (!contract) return;
@@ -124,7 +124,7 @@ export default function CreatePage() {
         ) : (
           <ConnectButton className="w-full" />
         )}
-        {error && <p className="text-sm text-danger">{error.shortMessage ?? error.message}</p>}
+        {error && <p className="text-sm text-danger">{writeErrorText(error)}</p>}
       </div>
     </main>
   );

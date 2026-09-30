@@ -1,12 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { useState } from "react";
 import { ConnectButton } from "@/components/ConnectButton";
 import { erc20Abi, ipinAbi } from "@/lib/abi";
 import { USDC, explorerAddress, explorerTx } from "@/lib/chain";
 import { ipinAddress } from "@/lib/contract";
+import { writeErrorText } from "@/lib/errors";
 import { formatUsdc, parseUsdc, shortAddr } from "@/lib/format";
 
 export default function PotPage() {
@@ -33,15 +34,13 @@ export default function PotPage() {
   });
 
   const { writeContract, data: hash, isPending, error } = useWriteContract();
-  const { isLoading: waiting } = useWaitForTransactionReceipt({
-    hash,
-    query: {
-      onSuccess() {
-        pot.refetch();
-        roster.refetch();
-      },
-    },
-  });
+  const { isLoading: waiting, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  useEffect(() => {
+    if (!isSuccess) return;
+    pot.refetch();
+    roster.refetch();
+  }, [isSuccess, pot, roster]);
 
   const busy = isPending || waiting;
   const data = pot.data;
@@ -183,7 +182,7 @@ export default function PotPage() {
           View transaction
         </a>
       )}
-      {error && <p className="mt-3 text-sm text-danger">{error.shortMessage ?? error.message}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{writeErrorText(error)}</p>}
     </main>
   );
 }
