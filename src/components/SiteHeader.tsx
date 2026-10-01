@@ -8,104 +8,55 @@ import { FAUCET, EXPLORER } from "@/lib/chain";
 
 const DESKTOP_LINKS = [
   { href: "/", label: "Home" },
-  { href: "/create", label: "Create pot" },
+  { href: "/app", label: "App" },
+  { href: "/distribute", label: "Distribute" },
   { href: "/bridge", label: "Bridge USDC" },
+  { href: "/account", label: "Account" },
 ];
 
 const MENU_LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/create", label: "Create pot" },
-  { href: "/bridge", label: "Bridge USDC" },
-  { href: FAUCET, label: "Get testnet USDC", external: true },
+  ...DESKTOP_LINKS.map((l) => ({ ...l, external: false })),
+  { href: FAUCET, label: "Faucet", external: true },
   { href: EXPLORER, label: "Explorer", external: true },
 ];
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
-
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
+    return () => { document.body.style.overflow = ""; };
   }, [open]);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   return (
     <>
-      <header className="sticky top-0 z-40 overflow-x-hidden border-b border-ink/10">
-        <div className="bg-ground/90 backdrop-blur-md">
-          <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:h-[4.25rem] sm:gap-4 sm:px-6">
-            <Link href="/" className="flex min-w-0 items-center gap-2 sm:gap-2.5">
-              <BrandLogo />
-              <span className="truncate font-display text-xl tracking-tight sm:text-2xl">Ipin</span>
-            </Link>
-
-            <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary">
-              {DESKTOP_LINKS.map((link) => (
-                <Link key={link.href} href={link.href} className="text-sm font-medium text-ink/80 transition hover:text-laterite">
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-
-            <div className="hidden items-center gap-2 lg:flex">
-              <ConnectButton />
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2 lg:hidden">
-              <ConnectButton className="h-11 min-w-[3.25rem] px-3 text-sm sm:px-4" />
-              <button
-                type="button"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/15 bg-panel"
-                aria-expanded={open}
-                aria-controls="mobile-menu"
-                aria-label={open ? "Close menu" : "Open menu"}
-                onClick={() => setOpen((v) => !v)}
-              >
-                <span className="sr-only">Menu</span>
-                <span className="relative block h-3.5 w-5">
-                  <span className={`absolute left-0 h-0.5 w-5 bg-ink transition ${open ? "top-1.5 rotate-45" : "top-0"}`} />
-                  <span className={`absolute left-0 top-1.5 h-0.5 w-5 bg-ink transition ${open ? "opacity-0" : "opacity-100"}`} />
-                  <span className={`absolute left-0 h-0.5 w-5 bg-ink transition ${open ? "top-1.5 -rotate-45" : "top-3"}`} />
-                </span>
-              </button>
-            </div>
-          </div>
+      <header className="sticky top-0 z-40 border-b border-ink/10 bg-ground/90 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:px-6">
+          <Link href="/" className="flex items-center gap-2">
+            <BrandLogo />
+            <span className="font-display text-xl sm:text-2xl">Ipin</span>
+          </Link>
+          <nav className="hidden items-center gap-6 lg:flex">
+            {DESKTOP_LINKS.map((link) => (
+              <Link key={link.href} href={link.href} className="text-sm font-medium text-ink/80 hover:text-laterite">{link.label}</Link>
+            ))}
+          </nav>
+          <div className="hidden lg:block"><ConnectButton /></div>
+          <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/15 lg:hidden" aria-label="Menu" onClick={() => setOpen((v) => !v)}>☰</button>
         </div>
       </header>
-
-      <div className={`fixed inset-0 z-[80] overflow-hidden lg:hidden ${open ? "pointer-events-auto" : "pointer-events-none invisible"}`}>
-        <button type="button" className={`absolute inset-0 bg-ground/70 transition-opacity ${open ? "opacity-100" : "opacity-0"}`} aria-label="Close menu overlay" onClick={() => setOpen(false)} />
-        <div id="mobile-menu" className={`absolute right-0 top-0 flex h-full w-[min(22rem,88vw)] flex-col bg-panel shadow-2xl transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}>
-          <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
-            <span className="font-display text-xl">Menu</span>
-            <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/15" onClick={() => setOpen(false)} aria-label="Close menu">
-              ×
-            </button>
-          </div>
-          <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-5 py-4" aria-label="Mobile">
-            {MENU_LINKS.map((link) =>
-              link.external ? (
-                <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="flex min-h-12 items-center rounded-xl px-3 text-base font-medium hover:bg-ground/40" onClick={() => setOpen(false)}>
-                  {link.label}
-                </a>
-              ) : (
-                <Link key={link.href} href={link.href} className="flex min-h-12 items-center rounded-xl px-3 text-base font-medium hover:bg-ground/40" onClick={() => setOpen(false)}>
-                  {link.label}
-                </Link>
-              ),
-            )}
+      {open && (
+        <div className="fixed inset-0 z-[80] lg:hidden">
+          <button type="button" className="absolute inset-0 bg-ground/70" aria-label="Close" onClick={() => setOpen(false)} />
+          <nav className="absolute right-0 top-0 flex h-full w-[min(22rem,88vw)] flex-col gap-1 bg-panel px-5 py-6">
+            {MENU_LINKS.map((link) => link.external ? (
+              <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="flex min-h-12 items-center" onClick={() => setOpen(false)}>{link.label}</a>
+            ) : (
+              <Link key={link.href} href={link.href} className="flex min-h-12 items-center" onClick={() => setOpen(false)}>{link.label}</Link>
+            ))}
+            <ConnectButton className="mt-4 w-full" />
           </nav>
         </div>
-      </div>
+      )}
     </>
   );
 }
