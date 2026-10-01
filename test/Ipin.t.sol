@@ -4,10 +4,7 @@ pragma solidity ^0.8.24;
 import "forge-std/Test.sol";
 import {Ipin} from "../contracts/Ipin.sol";
 
-contract MockUSDC {
-    string public name = "USD Coin";
-    string public symbol = "USDC";
-    uint8 public decimals = 6;
+contract MockToken {
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
@@ -38,21 +35,26 @@ contract MockUSDC {
 }
 
 contract IpinTest is Test {
-    MockUSDC usdc;
+    MockToken usdc;
+    MockToken eurc;
     Ipin ipin;
     address owner = address(0xA11CE);
     address a = address(0x1);
     address b = address(0x2);
 
     function setUp() public {
-        usdc = new MockUSDC();
-        ipin = new Ipin(address(usdc));
+        usdc = new MockToken();
+        eurc = new MockToken();
+        ipin = new Ipin(address(usdc), address(eurc));
         usdc.mint(owner, 1_000_000_000);
-        vm.prank(owner);
+        eurc.mint(owner, 1_000_000_000);
+        vm.startPrank(owner);
         usdc.approve(address(ipin), type(uint256).max);
+        eurc.approve(address(ipin), type(uint256).max);
+        vm.stopPrank();
     }
 
-    function _pot() internal returns (uint256 id) {
+    function _pot(address token) internal returns (uint256 id) {
         address[] memory members = new address[](2);
         members[0] = a;
         members[1] = b;
@@ -60,11 +62,11 @@ contract IpinTest is Test {
         shares[0] = 50;
         shares[1] = 50;
         vm.prank(owner);
-        id = ipin.createPot("crew", members, shares);
+        id = ipin.createPot("crew", token, members, shares);
     }
 
-    function testCreateAndFundAndPayOnce() public {
-        uint256 id = _pot();
+    function testCreateAndFundAndPayOnceUsdc() public {
+        uint256 id = _pot(address(usdc));
         vm.prank(owner);
         ipin.fund(id, 1_000_000);
         vm.prank(owner);
@@ -75,34 +77,33 @@ contract IpinTest is Test {
         ipin.pay(id, a);
     }
 
-    function testPayAllSplits() public {
-        uint256 id = _pot();
+    function testEurcPotPaysEurc() public {
+        uint256 id = _pot(address(eurc));
         vm.prank(owner);
-        ipin.fund(id, 1_000_000);
+        ipin.fund(id, 2_000_000);
         vm.prank(owner);
         ipin.payAll(id);
-        assertEq(usdc.balanceOf(a), 500_000);
-        assertEq(usdc.balanceOf(b), 500_000);
+        assertEq(eurc.balanceOf(a), 1_000_000);
+        assertEq(eurc.balanceOf(b), 1_000_000);
+        assertEq(usdc.balanceOf(a), 0);
+    }
+
+    function testRejectsUnknownToken() public {
+        address[] memory members = new address[](1);
+        members[0] = a;
+        uint96[] memory shares = new uint96[](1);
+        shares[0] = 1;
+        vm.prank(owner);
+        vm.expectRevert(Ipin.BadToken.selector);
+        ipin.createPot("x", address(0xBEEF), members, shares);
     }
 
     function testStrangerCannotPay() public {
-        uint256 id = _pot();
+        uint256 id = _pot(address(usdc));
         vm.prank(owner);
         ipin.fund(id, 1_000_000);
         vm.prank(a);
         vm.expectRevert(Ipin.NotOwner.selector);
         ipin.pay(id, a);
-    }
-
-    function testAnyoneCanFund() public {
-        uint256 id = _pot();
-        address donor = address(0xD0);
-        usdc.mint(donor, 250_000);
-        vm.startPrank(donor);
-        usdc.approve(address(ipin), 250_000);
-        ipin.fund(id, 250_000);
-        vm.stopPrank();
-        (,,,,, uint128 bal,,) = ipin.pots(id);
-        assertEq(bal, 250_000);
     }
 }

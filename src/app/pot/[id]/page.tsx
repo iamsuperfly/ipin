@@ -1,14 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { encodeFunctionData } from "viem";
+import {
+  useAccount,
+  useReadContract,
+  useSendCalls,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { ConnectButton } from "@/components/ConnectButton";
 import { erc20Abi, ipinAbi } from "@/lib/abi";
-import { USDC, explorerAddress, explorerTx } from "@/lib/chain";
+import { explorerAddress, explorerTx } from "@/lib/chain";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
 import { formatUsdc, parseUsdc, shortAddr } from "@/lib/format";
+import { tokenSymbol } from "@/lib/tokens";
 
 export default function PotPage() {
   const params = useParams<{ id: string }>();
@@ -16,6 +25,7 @@ export default function PotPage() {
   const contract = ipinAddress();
   const { address, isConnected } = useAccount();
   const [amount, setAmount] = useState("1");
+  const [batchNote, setBatchNote] = useState("");
 
   const pot = useReadContract({
     address: contract,
@@ -35,6 +45,7 @@ export default function PotPage() {
 
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: waiting, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const { sendCalls, isPending: batching, error: batchError } = useSendCalls();
 
   useEffect(() => {
     if (!isSuccess) return;
@@ -42,27 +53,60 @@ export default function PotPage() {
     roster.refetch();
   }, [isSuccess, pot, roster]);
 
-  const busy = isPending || waiting;
+  const busy = isPending || waiting || batching;
   const data = pot.data;
   const owner = data?.[0];
   const name = data?.[1];
-  const totalShares = data?.[3] ?? 0n;
-  const round = data?.[4] ?? 0;
-  const balance = data?.[5] ?? 0n;
+  const token = data?.[2];
+  const totalShares = data?.[4] ?? 0n;
+  const round = data?.[5] ?? 0;
+  const balance = data?.[6] ?? 0n;
+  const symbol = tokenSymbol(token);
   const isOwner = Boolean(address && owner && address.toLowerCase() === owner.toLowerCase());
 
   const members = roster.data?.[0] ?? [];
   const shares = roster.data?.[1] ?? [];
   const paidFlags = roster.data?.[2] ?? [];
 
-  function fund() {
-    if (!contract) return;
+  async function fundOnce() {
+    if (!contract || !token) return;
     const units = parseUsdc(amount);
+    setBatchNote("");
+    try {
+      await sendCalls({
+        calls: [
+          {
+            to: token,
+            data: encodeFunctionData({
+              abi: erc20Abi,
+              functionName: "approve",
+              args: [contract, units],
+            }),
+          },
+          {
+            to: contract,
+            data: encodeFunctionData({
+              abi: ipinAbi,
+              functionName: "fund",
+              args: [id, units],
+            }),
+          },
+        ],
+      });
+      setBatchNote("Wallet batched approve + fund. One popup.");
+      pot.refetch();
+    } catch {
+      setBatchNote("This wallet will not batch. Approve, then fund.");
+    }
+  }
+
+  function approveOnly() {
+    if (!contract || !token) return;
     writeContract({
-      address: USDC,
+      address: token,
       abi: erc20Abi,
       functionName: "approve",
-      args: [contract, units],
+      args: [contract, parseUsdc(amount)],
     });
   }
 
@@ -78,7 +122,9 @@ export default function PotPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-5 pb-24 pt-10">
-      <p className="text-sm text-laterite">Pot {params.id} · round {String(round)}</p>
+      <p className="text-sm text-laterite">
+        Pot {params.id} · round {String(round)} · {symbol}
+      </p>
       <h1 className="mt-2 font-display text-4xl sm:text-5xl">{name || "…"}</h1>
       <p className="mt-2 text-mute">
         Owner{" "}
@@ -91,7 +137,9 @@ export default function PotPage() {
 
       <div className="mt-8 rounded-3xl border border-ink/10 bg-panel p-6">
         <p className="text-sm text-mute">In the pot</p>
-        <p className="font-display text-5xl tabular-nums">{formatUsdc(balance as bigint)} USDC</p>
+        <p className="font-display text-5xl tabular-nums">
+          {formatUsdc(balance as bigint)} {symbol}
+        </p>
       </div>
 
       <section className="mt-8 space-y-3">
@@ -111,7 +159,9 @@ export default function PotPage() {
                 <div className="h-full bg-laterite" style={{ width: `${pct}%` }} />
               </div>
               <div className="mt-2 flex items-center justify-between text-sm text-mute">
-                <span>{pct}% · {String(sh)} shares</span>
+                <span>
+                  {pct}% · {String(sh)} shares
+                </span>
                 {isOwner && !done && (
                   <button
                     type="button"
@@ -137,25 +187,32 @@ export default function PotPage() {
       </section>
 
       <section className="mt-8 rounded-3xl border border-ink/10 bg-panel p-6">
-        <h2 className="font-display text-2xl">Pour USDC in</h2>
-        <p className="mt-1 text-sm text-mute">Approve first, then fund. Two clicks. Testnet only.</p>
+        <h2 className="font-display text-2xl">Pour {symbol} in</h2>
+        <p className="mt-1 text-sm text-mute">One popup if the wallet batches. Otherwise approve, then fund.</p>
         <input
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           className="mt-4 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite"
         />
         {isConnected ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <button type="button" className="btn-ghost w-full" disabled={busy || !contract} onClick={fund}>
-              Approve
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <button type="button" className="btn-primary w-full sm:col-span-3" disabled={busy || !contract} onClick={fundOnce}>
+              Approve and fund
             </button>
-            <button type="button" className="btn-primary w-full" disabled={busy || !contract} onClick={deposit}>
+            <button type="button" className="btn-ghost w-full" disabled={busy || !contract} onClick={approveOnly}>
+              Approve only
+            </button>
+            <button type="button" className="btn-ghost w-full sm:col-span-2" disabled={busy || !contract} onClick={deposit}>
               Fund pot
             </button>
           </div>
         ) : (
           <ConnectButton className="mt-4 w-full" />
         )}
+        {batchNote && <p className="mt-3 text-sm text-mute">{batchNote}</p>}
+        <Link href={`/bridge?pot=${params.id}`} className="mt-4 inline-block text-sm text-laterite">
+          I have USDC on Base or Ethereum → bring it to Arc
+        </Link>
       </section>
 
       {isOwner && (
@@ -182,7 +239,9 @@ export default function PotPage() {
           View transaction
         </a>
       )}
-      {error && <p className="mt-3 text-sm text-danger">{writeErrorText(error)}</p>}
+      {(error || batchError) && (
+        <p className="mt-3 text-sm text-danger">{writeErrorText(error ?? batchError)}</p>
+      )}
     </main>
   );
 }

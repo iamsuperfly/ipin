@@ -2,7 +2,10 @@ export const ipinAbi = [
   {
     type: "constructor",
     stateMutability: "nonpayable",
-    inputs: [{ name: "usdc_", type: "address" }],
+    inputs: [
+      { name: "usdc_", type: "address" },
+      { name: "eurc_", type: "address" },
+    ],
   },
   {
     type: "function",
@@ -10,6 +13,7 @@ export const ipinAbi = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "name", type: "string" },
+      { name: "token", type: "address" },
       { name: "members", type: "address[]" },
       { name: "shares", type: "uint96[]" },
     ],
@@ -75,6 +79,7 @@ export const ipinAbi = [
     outputs: [
       { name: "owner", type: "address" },
       { name: "name", type: "string" },
+      { name: "token", type: "address" },
       { name: "memberCount", type: "uint32" },
       { name: "totalShares", type: "uint96" },
       { name: "round", type: "uint32" },
@@ -98,31 +103,20 @@ export const ipinAbi = [
     outputs: [{ name: "", type: "address" }],
   },
   {
+    type: "function",
+    name: "eurc",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
     type: "event",
     name: "PotCreated",
     inputs: [
       { name: "id", type: "uint256", indexed: true },
       { name: "owner", type: "address", indexed: true },
+      { name: "token", type: "address", indexed: true },
       { name: "name", type: "string", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "Funded",
-    inputs: [
-      { name: "id", type: "uint256", indexed: true },
-      { name: "from", type: "address", indexed: true },
-      { name: "amount", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "Paid",
-    inputs: [
-      { name: "id", type: "uint256", indexed: true },
-      { name: "round", type: "uint32", indexed: false },
-      { name: "member", type: "address", indexed: true },
-      { name: "amount", type: "uint256", indexed: false },
     ],
   },
 ] as const;

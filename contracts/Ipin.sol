@@ -6,15 +6,16 @@ interface IERC20 {
     function transferFrom(address from, address to, uint256 value) external returns (bool);
 }
 
-/// @title Ipin — team USDC pots on Arc. A share is a share. Paid once.
-/// @notice Anyone may create a pot. The creator owns that pot only.
-///         Fund with USDC. Owner pays members. Same member cannot be paid twice in one round.
+/// @title Ipin — team pots on Arc. A share is a share. Paid once.
+/// @notice Each pot is one currency: USDC or EURC. Owner pays. Paid once per round.
 contract Ipin {
     IERC20 public immutable usdc;
+    IERC20 public immutable eurc;
 
     struct Pot {
         address owner;
         string name;
+        address token;
         uint32 memberCount;
         uint96 totalShares;
         uint32 round;
@@ -29,7 +30,7 @@ contract Ipin {
     mapping(uint256 => mapping(address => uint96)) public shareOf;
     mapping(uint256 => mapping(uint32 => mapping(address => bool))) public paid;
 
-    event PotCreated(uint256 indexed id, address indexed owner, string name);
+    event PotCreated(uint256 indexed id, address indexed owner, address indexed token, string name);
     event Funded(uint256 indexed id, address indexed from, uint256 amount);
     event RoundOpened(uint256 indexed id, uint32 round, uint256 pool);
     event Paid(uint256 indexed id, uint32 round, address indexed member, uint256 amount);
@@ -49,17 +50,21 @@ contract Ipin {
     error TransferFailed();
     error UnpaidMembers();
     error RoundNotOpen();
+    error BadToken();
 
-    constructor(address usdc_) {
-        if (usdc_ == address(0)) revert ZeroAddress();
+    constructor(address usdc_, address eurc_) {
+        if (usdc_ == address(0) || eurc_ == address(0)) revert ZeroAddress();
         usdc = IERC20(usdc_);
+        eurc = IERC20(eurc_);
     }
 
     function createPot(
         string calldata name,
+        address token,
         address[] calldata members,
         uint96[] calldata shares
     ) external returns (uint256 id) {
+        if (token != address(usdc) && token != address(eurc)) revert BadToken();
         if (members.length == 0 || members.length != shares.length) revert BadLength();
         if (members.length > 32) revert TooMany();
 
@@ -77,6 +82,7 @@ contract Ipin {
         pots[id] = Pot({
             owner: msg.sender,
             name: name,
+            token: token,
             memberCount: uint32(members.length),
             totalShares: total,
             round: 1,
@@ -85,14 +91,14 @@ contract Ipin {
             roundOpen: false
         });
 
-        emit PotCreated(id, msg.sender, name);
+        emit PotCreated(id, msg.sender, token, name);
     }
 
     function fund(uint256 id, uint256 amount) external {
         Pot storage p = pots[id];
         if (p.owner == address(0)) revert UnknownPot();
         if (amount == 0) revert Empty();
-        if (!usdc.transferFrom(msg.sender, address(this), amount)) revert TransferFailed();
+        if (!IERC20(p.token).transferFrom(msg.sender, address(this), amount)) revert TransferFailed();
         p.balance += uint128(amount);
         emit Funded(id, msg.sender, amount);
     }
@@ -118,7 +124,7 @@ contract Ipin {
         uint256 amount = (uint256(p.roundPool) * sh) / p.totalShares;
         paid[id][p.round][member] = true;
         p.balance -= uint128(amount);
-        if (!usdc.transfer(member, amount)) revert TransferFailed();
+        if (!IERC20(p.token).transfer(member, amount)) revert TransferFailed();
         emit Paid(id, p.round, member, amount);
     }
 

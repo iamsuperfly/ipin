@@ -1,4 +1,5 @@
 import { defineChain } from "viem";
+import { baseSepolia, sepolia } from "viem/chains";
 
 export const ARC_TESTNET_ID = 5042002;
 
@@ -14,7 +15,10 @@ export const arcTestnet = defineChain({
   },
 });
 
+export { baseSepolia, sepolia };
+
 export const USDC = "0x3600000000000000000000000000000000000000" as const;
+export const EURC = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a" as const;
 export const EXPLORER = "https://testnet.arcscan.app";
 export const FAUCET = "https://faucet.circle.com";
 export const RPC = "https://rpc.testnet.arc.network";

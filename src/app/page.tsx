@@ -21,29 +21,30 @@ export default function HomePage() {
           Paid once.
         </h1>
         <p className="mt-6 max-w-xl text-lg leading-relaxed text-mute">
-          Ipin is a team pot. Pour USDC in. Cut the shares. The contract will not pay the same person twice in a round.
-          Gas is USDC, so a small cut stays a small cut.
+          Ipin is a team pot in USDC or EURC. Pour it in. Cut the shares. The contract will not pay the same person twice in a round.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
           <Link href="/create" className="btn-primary w-full sm:w-auto">
             Create a pot
           </Link>
+          <Link href="/bridge" className="btn-ghost w-full sm:w-auto">
+            Bridge USDC to Arc
+          </Link>
           <a href={FAUCET} target="_blank" rel="noreferrer" className="btn-ghost w-full sm:w-auto">
-            Get testnet USDC
+            Faucet
           </a>
         </div>
         {!deployed && (
           <p className="mt-6 rounded-2xl border border-laterite/30 bg-panel px-4 py-3 text-sm text-mute">
-            Contract address is not set yet. Deploy <span className="font-mono text-ink">Ipin.sol</span> on Remix, then add{" "}
-            <span className="font-mono text-ink">NEXT_PUBLIC_IPIN_ADDRESS</span> on Vercel.
+            Redeploy Ipin with constructor <span className="font-mono text-ink">usdc_</span> and <span className="font-mono text-ink">eurc_</span>, then set NEXT_PUBLIC_IPIN_ADDRESS.
           </p>
         )}
       </section>
 
       <section className="mt-16 grid gap-4 sm:grid-cols-3">
         {[
-          { t: "Pour", d: "Anyone can fund a pot with USDC. No account. No token." },
-          { t: "Cut", d: "Shares are integers. Fifty / thirty / twenty. The pot does the maths." },
+          { t: "Pour", d: "Fund in one popup when the wallet batches. USDC or EURC, not mixed." },
+          { t: "Cut", d: "Shares are integers. The pot does the maths." },
           { t: "Stamp", d: "Paid is paid. A second send in the same round reverts." },
         ].map((card) => (
           <article key={card.t} className="rounded-3xl border border-ink/10 bg-panel p-6">
