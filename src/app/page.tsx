@@ -11,22 +11,9 @@ const RECIPIENTS = [
 ];
 
 export default function LandingPage() {
-  const [typed, setTyped] = useState("");
   const [phase, setPhase] = useState(0);
   const [count, setCount] = useState(0);
-  const full = "ARC'S DISTRIBUTION LAYER";
-
-  useEffect(() => {
-    let i = 0;
-    const id = setInterval(() => {
-      i += 1;
-      setTyped(full.slice(0, i));
-      if (i >= full.length) clearInterval(id);
-    }, 42);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
+    useEffect(() => {
     const id = setInterval(() => setPhase((p) => (p + 1) % 4), 1800);
     return () => clearInterval(id);
   }, []);
@@ -46,10 +33,8 @@ export default function LandingPage() {
       <section className="grid items-center gap-12 lg:grid-cols-2">
         <div>
           <p className="text-sm font-medium tracking-[0.18em] text-laterite">IPIN</p>
-          <h1 className="mt-3 min-h-[4.5rem] font-display text-4xl leading-tight sm:text-6xl">{typed}</h1>
-          <p className="mt-5 max-w-xl text-lg text-mute">
-            One pool. Many people. USDC settles on Arc. Recipients get the full allocation. You pay the IPIN fee on top.
-          </p>
+          <h1 className="mt-3 min-h-[4.5rem] text-4xl font-bold leading-tight sm:text-5xl">IPIN<br /><span className="phrase">Arc's distribution layer</span></h1>
+          <p className="mt-5 max-w-xl text-lg text-mute">One pool. Many people. <span className="phrase">USDC settles on Arc.</span> Recipients get the full allocation. You pay the IPIN fee on top.</p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link href="/distribute" className="btn-primary w-full sm:w-auto">Create a distribution</Link>
             <Link href="/app" className="btn-ghost w-full sm:w-auto">Open the app</Link>
