@@ -1,80 +1,112 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { FAUCET } from "@/lib/chain";
-import { ipinAddress } from "@/lib/contract";
+import { useEffect, useState } from "react";
 
-export default function HomePage() {
-  const router = useRouter();
-  const [id, setId] = useState("");
-  const deployed = Boolean(ipinAddress());
+const RECIPIENTS = [
+  { name: "Ada", amount: "4,200" },
+  { name: "Kunle", amount: "1,150" },
+  { name: "Mara", amount: "860" },
+  { name: "Ife", amount: "2,040" },
+];
+
+export default function LandingPage() {
+  const [typed, setTyped] = useState("");
+  const [phase, setPhase] = useState(0);
+  const [count, setCount] = useState(0);
+  const full = "ARC'S DISTRIBUTION LAYER";
+
+  useEffect(() => {
+    let i = 0;
+    const id = setInterval(() => {
+      i += 1;
+      setTyped(full.slice(0, i));
+      if (i >= full.length) clearInterval(id);
+    }, 42);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => setPhase((p) => (p + 1) % 4), 1800);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let n = 0;
+    const id = setInterval(() => {
+      n = Math.min(25000, n + 625);
+      setCount(n);
+      if (n >= 25000) clearInterval(id);
+    }, 30);
+    return () => clearInterval(id);
+  }, [phase === 0]);
 
   return (
-    <main className="mx-auto max-w-6xl px-5 pb-24 pt-10 sm:pt-16">
-      <section className="rise-in max-w-3xl">
-        <p className="text-sm font-medium tracking-wide text-laterite">Arc testnet</p>
-        <h1 className="mt-3 font-display text-5xl leading-[1.05] tracking-tight sm:text-7xl">
-          A share is a share.
-          <br />
-          Paid once.
-        </h1>
-        <p className="mt-6 max-w-xl text-lg leading-relaxed text-mute">
-          Ipin is a team pot in USDC or EURC. Pour it in. Cut the shares. The contract will not pay the same person twice in a round.
-        </p>
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Link href="/create" className="btn-primary w-full sm:w-auto">
-            Create a pot
-          </Link>
-          <Link href="/bridge" className="btn-ghost w-full sm:w-auto">
-            Bridge USDC to Arc
-          </Link>
-          <a href={FAUCET} target="_blank" rel="noreferrer" className="btn-ghost w-full sm:w-auto">
-            Faucet
-          </a>
-        </div>
-        {!deployed && (
-          <p className="mt-6 rounded-2xl border border-laterite/30 bg-panel px-4 py-3 text-sm text-mute">
-            Redeploy Ipin with constructor <span className="font-mono text-ink">usdc_</span> and <span className="font-mono text-ink">eurc_</span>, then set NEXT_PUBLIC_IPIN_ADDRESS.
+    <main className="mx-auto max-w-6xl px-5 pb-28 pt-12">
+      <section className="grid items-center gap-12 lg:grid-cols-2">
+        <div>
+          <p className="text-sm font-medium tracking-[0.18em] text-laterite">IPIN</p>
+          <h1 className="mt-3 min-h-[4.5rem] font-display text-4xl leading-tight sm:text-6xl">{typed}</h1>
+          <p className="mt-5 max-w-xl text-lg text-mute">
+            One pool. Many people. USDC settles on Arc. Recipients get the full allocation. You pay the IPIN fee on top.
           </p>
-        )}
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Link href="/distribute" className="btn-primary w-full sm:w-auto">Create a distribution</Link>
+            <Link href="/app" className="btn-ghost w-full sm:w-auto">Open the app</Link>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-ink/10 bg-panel p-6">
+          <p className="text-sm text-mute">Pool</p>
+          <p className="font-display text-5xl tabular-nums">{count.toLocaleString()} USDC</p>
+          <p className="mt-2 text-sm text-laterite">{phase === 0 ? "Ready" : phase === 1 ? "Distributing" : phase === 2 ? "Writing receipts on Arc" : "Settled"}</p>
+          <div className="mt-6 space-y-3">
+            {RECIPIENTS.map((r, i) => (
+              <div key={r.name} className="flex items-center justify-between rounded-2xl border border-ink/10 px-4 py-3" style={{ transform: phase > 0 ? "translateX(0)" : "translateX(12px)", opacity: phase === 0 ? 0.45 : 1, transition: `all 0.5s ${i * 80}ms` }}>
+                <span>{r.name}</span>
+                <span className="font-mono">{phase >= 2 ? r.amount : "—"} USDC</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-sm text-mute">{phase === 3 ? "4 recipients · 8,250 USDC · settled on Arc" : "Waiting on the cut"}</p>
+        </div>
       </section>
 
-      <section className="mt-16 grid gap-4 sm:grid-cols-3">
-        {[
-          { t: "Pour", d: "Fund in one popup when the wallet batches. USDC or EURC, not mixed." },
-          { t: "Cut", d: "Shares are integers. The pot does the maths." },
-          { t: "Stamp", d: "Paid is paid. A second send in the same round reverts." },
-        ].map((card) => (
-          <article key={card.t} className="rounded-3xl border border-ink/10 bg-panel p-6">
-            <h2 className="font-display text-2xl">{card.t}</h2>
-            <p className="mt-2 text-mute">{card.d}</p>
-          </article>
-        ))}
+      <section className="mt-24 grid gap-6 lg:grid-cols-2">
+        <article className="rounded-3xl border border-ink/10 bg-panel p-6">
+          <h2 className="font-display text-3xl">By hand</h2>
+          <p className="mt-4 font-mono text-sm text-mute">Wallet → Ada → Kunle → Mara → Ife → …</p>
+          <p className="mt-3 text-mute">Every person is a separate send. Miss one, pay twice, lose the thread.</p>
+        </article>
+        <article className="rounded-3xl border border-laterite/40 bg-panel p-6">
+          <h2 className="font-display text-3xl">Through IPIN</h2>
+          <p className="mt-4 font-mono text-sm">Wallet → IPIN → everyone</p>
+          <p className="mt-3 text-mute">One distribution. Amounts stay whole. Paid once.</p>
+        </article>
       </section>
 
-      <form
-        className="mt-16 max-w-lg rounded-3xl border border-ink/10 bg-panel p-6"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const n = id.trim();
-          if (!n) return;
-          router.push(`/pot/${n}`);
-        }}
-      >
-        <label className="font-display text-xl">Open a pot</label>
-        <input
-          value={id}
-          onChange={(e) => setId(e.target.value)}
-          inputMode="numeric"
-          placeholder="Pot number"
-          className="mt-4 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono text-ink outline-none focus:border-laterite"
-        />
-        <button type="submit" className="btn-primary mt-4 w-full">
-          Open
-        </button>
-      </form>
+      <section className="mt-20">
+        <h2 className="font-display text-4xl">Create. Fund. Distribute. Verify.</h2>
+        <ol className="mt-8 grid gap-4 sm:grid-cols-4">
+          {[
+            ["Create", "Name the distribution. Paste addresses and USDC amounts."],
+            ["Fund", "You send the pool plus the IPIN fee. They are not the same number."],
+            ["Distribute", "The contract pays each address once."],
+            ["Verify", "The Arc transaction is the record."],
+          ].map(([t, d]) => (
+            <li key={t} className="rounded-3xl border border-ink/10 bg-panel p-5">
+              <h3 className="font-display text-2xl">{t}</h3>
+              <p className="mt-2 text-sm text-mute">{d}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="mt-20 rounded-3xl border border-ink/10 bg-panel p-8">
+        <h2 className="font-display text-3xl">What you can run today</h2>
+        <p className="mt-3 max-w-2xl text-mute">A campaign pool, a recipient list, allocation amounts, a distribution, and an on-chain result. A programmable API comes later. It is not live.</p>
+        <Link href="/distribute" className="btn-primary mt-6 inline-flex">Start on Arc testnet</Link>
+      </section>
     </main>
   );
 }
