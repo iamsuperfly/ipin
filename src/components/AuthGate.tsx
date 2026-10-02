@@ -32,7 +32,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   async function google() {
     const sb = supabaseBrowser();
     if (!sb) {
-      setNote("Sign-in is not configured. Add the Supabase URL and anon key.");
+      setNote("Sign-in is not configured.");
       return;
     }
     await sb.auth.signInWithOAuth({
@@ -46,8 +46,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (!user) {
     return (
       <main className="mx-auto max-w-lg px-5 pt-16">
-        <h1 className="font-display text-4xl">Sign in to use IPIN</h1>
-        <p className="mt-3 text-mute">Google is the door. Wallet connect and distributions stay behind it.</p>
+        <h1 className="text-4xl font-bold">Sign in</h1>
         <button type="button" className="btn-primary mt-6 w-full" onClick={google}>Continue with Google</button>
         {note && <p className="mt-3 text-sm text-mute">{note}</p>}
       </main>

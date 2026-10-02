@@ -10,10 +10,13 @@ const RECIPIENTS = [
   { name: "Ife", amount: "2,040" },
 ];
 
+const PILLS = ["Pool", "Recipient list", "Amounts", "Paid once", "Arc settlement"];
+
 export default function LandingPage() {
   const [phase, setPhase] = useState(0);
   const [count, setCount] = useState(0);
-    useEffect(() => {
+
+  useEffect(() => {
     const id = setInterval(() => setPhase((p) => (p + 1) % 4), 1800);
     return () => clearInterval(id);
   }, []);
@@ -43,8 +46,8 @@ export default function LandingPage() {
 
         <div className="rounded-3xl border border-ink/10 bg-panel p-6">
           <p className="text-sm text-mute">Pool</p>
-          <p className="font-display text-5xl tabular-nums">{count.toLocaleString()} USDC</p>
-          <p className="mt-2 text-sm text-laterite">{phase === 0 ? "Ready" : phase === 1 ? "Distributing" : phase === 2 ? "Writing receipts on Arc" : "Settled"}</p>
+          <p className="text-5xl font-bold tabular-nums">{count.toLocaleString()} USDC</p>
+          <p className="mt-2 text-sm text-laterite">{phase === 0 ? "Ready" : phase === 1 ? "Distributing" : phase === 2 ? "Settling on Arc" : "Settled"}</p>
           <div className="mt-6 space-y-3">
             {RECIPIENTS.map((r, i) => (
               <div key={r.name} className="flex items-center justify-between rounded-2xl border border-ink/10 px-4 py-3" style={{ transform: phase > 0 ? "translateX(0)" : "translateX(12px)", opacity: phase === 0 ? 0.45 : 1, transition: `all 0.5s ${i * 80}ms` }}>
@@ -59,19 +62,19 @@ export default function LandingPage() {
 
       <section className="mt-24 grid gap-6 lg:grid-cols-2">
         <article className="rounded-3xl border border-ink/10 bg-panel p-6">
-          <h2 className="font-display text-3xl">By hand</h2>
+          <h2 className="text-3xl font-bold">By hand</h2>
           <p className="mt-4 font-mono text-sm text-mute">Wallet → Ada → Kunle → Mara → Ife → …</p>
           <p className="mt-3 text-mute">Every person is a separate send. Miss one, pay twice, lose the thread.</p>
         </article>
         <article className="rounded-3xl border border-laterite/40 bg-panel p-6">
-          <h2 className="font-display text-3xl">Through IPIN</h2>
+          <h2 className="text-3xl font-bold">Through IPIN</h2>
           <p className="mt-4 font-mono text-sm">Wallet → IPIN → everyone</p>
           <p className="mt-3 text-mute">One distribution. Amounts stay whole. Paid once.</p>
         </article>
       </section>
 
       <section className="mt-20">
-        <h2 className="font-display text-4xl">Create. Fund. Distribute. Verify.</h2>
+        <h2 className="text-4xl font-bold">Create. Fund. Distribute. Verify.</h2>
         <ol className="mt-8 grid gap-4 sm:grid-cols-4">
           {[
             ["Create", "Name the distribution. Paste addresses and USDC amounts."],
@@ -80,16 +83,20 @@ export default function LandingPage() {
             ["Verify", "The Arc transaction is the record."],
           ].map(([t, d]) => (
             <li key={t} className="rounded-3xl border border-ink/10 bg-panel p-5">
-              <h3 className="font-display text-2xl">{t}</h3>
+              <h3 className="text-2xl font-bold">{t}</h3>
               <p className="mt-2 text-sm text-mute">{d}</p>
             </li>
           ))}
         </ol>
       </section>
 
-      <section className="mt-20 rounded-3xl border border-ink/10 bg-panel p-8">
-        <h2 className="font-display text-3xl">What you can run today</h2>
-        <p className="mt-3 max-w-2xl text-mute">A campaign pool, a recipient list, allocation amounts, a distribution, and an on-chain result. A programmable API comes later. It is not live.</p>
+      <section className="mt-20">
+        <p className="text-sm text-mute">What you can run today</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {PILLS.map((pill) => (
+            <span key={pill} className="rounded-full border border-ink/10 bg-panel px-4 py-2 text-sm">{pill}</span>
+          ))}
+        </div>
         <Link href="/distribute" className="btn-primary mt-6 inline-flex">Start on Arc testnet</Link>
       </section>
     </main>
