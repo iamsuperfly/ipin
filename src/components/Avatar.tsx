@@ -10,6 +10,8 @@ export function Avatar({
   const letter = (name.trim()[0] || "I").toUpperCase();
   if (src) {
     return (
+      // External profile pictures are not on the image optimizer allow list.
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt=""

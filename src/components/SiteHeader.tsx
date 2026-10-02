@@ -36,15 +36,16 @@ export function SiteHeader() {
   useEffect(() => {
     const sb = supabaseBrowser();
     if (!sb) return;
+    const client = sb;
     async function load(next: User | null) {
       setUser(next);
       if (!next) return;
-      const row = await sb.from("profiles").select("display_name,avatar_url").eq("id", next.id).maybeSingle();
+      const row = await client.from("profiles").select("display_name,avatar_url").eq("id", next.id).maybeSingle();
       setStoredName(row.data?.display_name ?? null);
       setStoredPic(row.data?.avatar_url ?? null);
     }
-    sb.auth.getSession().then(({ data }) => void load(data.session?.user ?? null));
-    const { data } = sb.auth.onAuthStateChange((_e, session) => void load(session?.user ?? null));
+    client.auth.getSession().then(({ data }) => void load(data.session?.user ?? null));
+    const { data } = client.auth.onAuthStateChange((_e, session) => void load(session?.user ?? null));
     return () => data.subscription.unsubscribe();
   }, []);
 
