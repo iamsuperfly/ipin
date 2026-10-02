@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-ground: #1a120b;
-  --color-panel: #2a1c12;
-  --color-ink: #f3e6d0;
-  --color-mute: #cbb79a;
-  --color-laterite: #c45c26;
+  --color-ground: #f7f6f2;
+  --color-panel: #fffdf8;
+  --color-ink: #1b1813;
+  --color-mute: #6d6b64;
+  --color-laterite: #007a66;
   --color-laterite-deep: #9a3f16;
   --color-river: #2f6f6b;
   --color-danger: #b42318;
@@ -70,15 +70,15 @@ footer {
   min-height: 3rem;
   padding: 0 1.35rem;
   border-radius: 999px;
-  background: #c45c26;
-  color: #f3e6d0;
+  background: #007a66;
+  color: #fffdf8;
   font-weight: 600;
   transition: transform 0.15s ease, background 0.15s ease;
   box-shadow: 0 8px 18px rgba(196, 92, 38, 0.22);
 }
 
 .btn-primary:hover {
-  background: #9a3f16;
+  background: #005e4e;
 }
 
 .btn-primary:active {
@@ -97,9 +97,9 @@ footer {
   min-height: 3rem;
   padding: 0 1.2rem;
   border-radius: 999px;
-  border: 1px solid rgba(243, 230, 208, 0.16);
-  background: #2a1c12;
-  color: #f3e6d0;
+  border: 1px solid rgba(27, 24, 19, 0.12);
+  background: #fffdf8;
+  color: #1b1813;
   font-weight: 600;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
@@ -158,3 +158,6 @@ footer {
     transition: none;
   }
 }
+
+.phrase { color: #007a66; }
+.font-display { font-family: var(--font-display), "DM Sans", sans-serif; }

@@ -16,7 +16,9 @@ import { erc20Abi, ipinAbi } from "@/lib/abi";
 import { explorerAddress, explorerTx } from "@/lib/chain";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
+import { FEE_WALLET, quoteFee } from "@/lib/fee";
 import { formatUsdc, parseUsdc, shortAddr } from "@/lib/format";
+import { supabaseBrowser } from "@/lib/supabase";
 import { tokenSymbol } from "@/lib/tokens";
 
 export default function PotPage() {
@@ -26,6 +28,7 @@ export default function PotPage() {
   const { address, isConnected } = useAccount();
   const [amount, setAmount] = useState("1");
   const [batchNote, setBatchNote] = useState("");
+  const [volume, setVolume] = useState(0n);
 
   const pot = useReadContract({
     address: contract,
@@ -53,6 +56,18 @@ export default function PotPage() {
     roster.refetch();
   }, [isSuccess, pot, roster]);
 
+  useEffect(() => {
+    const sb = supabaseBrowser();
+    if (!sb) return;
+    const month = new Date().toISOString().slice(0, 7);
+    sb.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const row = await sb.from("fee_ledger").select("volume").eq("account_id", data.user.id).eq("month", month).maybeSingle();
+      const raw = row.data?.volume;
+      if (raw != null) setVolume(BigInt(Math.round(Number(raw) * 1_000_000)));
+    });
+  }, []);
+
   const busy = isPending || waiting || batching;
   const data = pot.data;
   const owner = data?.[0];
@@ -71,29 +86,39 @@ export default function PotPage() {
   async function fundOnce() {
     if (!contract || !token) return;
     const units = parseUsdc(amount);
+    const quote = quoteFee(volume, units);
     setBatchNote("");
-    try {
-      await sendCalls({
-        calls: [
-          {
-            to: token,
-            data: encodeFunctionData({
-              abi: erc20Abi,
-              functionName: "approve",
-              args: [contract, units],
-            }),
-          },
-          {
-            to: contract,
-            data: encodeFunctionData({
-              abi: ipinAbi,
-              functionName: "fund",
-              args: [id, units],
-            }),
-          },
-        ],
+    const calls = [
+      {
+        to: token,
+        data: encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [contract, units],
+        }),
+      },
+      {
+        to: contract,
+        data: encodeFunctionData({
+          abi: ipinAbi,
+          functionName: "fund",
+          args: [id, units],
+        }),
+      },
+    ];
+    if (quote.fee > 0n) {
+      calls.push({
+        to: token,
+        data: encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [FEE_WALLET, quote.fee],
+        }),
       });
-      setBatchNote("Wallet batched approve + fund. One popup.");
+    }
+    try {
+      await sendCalls({ calls });
+      setBatchNote(`Batched. Recipients get ${formatUsdc(units)}. Fee on top ${formatUsdc(quote.fee)}.`);
       pot.refetch();
     } catch {
       setBatchNote("This wallet will not batch. Approve, then fund.");
@@ -188,7 +213,7 @@ export default function PotPage() {
 
       <section className="mt-8 rounded-3xl border border-ink/10 bg-panel p-6">
         <h2 className="font-display text-2xl">Pour {symbol} in</h2>
-        <p className="mt-1 text-sm text-mute">One popup if the wallet batches. Otherwise approve, then fund.</p>
+        <p className="mt-1 text-sm text-mute">Recipients get the amount. IPIN fee is a separate transfer to the fee wallet. One popup if the wallet batches.</p>
         <input
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
