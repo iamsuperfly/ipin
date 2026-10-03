@@ -43,7 +43,7 @@ export default function AccountPage() {
 
   async function google() {
     if (!supabase) {
-      setNote("Sign-in is not configured.");
+      setNote("Couldn't sign in. Try again.");
       return;
     }
     await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/auth/callback` } });
@@ -61,7 +61,7 @@ export default function AccountPage() {
     const path = `${user.id}/avatar`;
     const up = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
     if (up.error) {
-      setNote("Run supabase/002_profile.sql, then try the picture again.");
+      setNote("Couldn't save the picture. Try again.");
       return;
     }
     const url = supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl;

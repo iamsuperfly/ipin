@@ -16,7 +16,7 @@ export default function DistributionsPage() {
     sb.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
       const list = await sb.from("campaigns").select("id,name,pool_amount,status,pot_id").order("created_at", { ascending: false });
-      if (list.error) setNote("History needs the campaigns table from the first schema.");
+      if (list.error) setNote("Couldn't load your distributions. Try again.");
       setRows((list.data as Row[]) ?? []);
     });
   }, []);

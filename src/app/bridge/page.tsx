@@ -157,7 +157,7 @@ export default function BridgePage() {
       functionName: "receiveMessage",
       args: [message, attestation],
     });
-    setStatus("Mint submitted on Arc. Then fund the pot with the landed USDC.");
+    setStatus("Mint submitted on Arc. Fund the distribution with the USDC that lands.");
   }
 
   return (
@@ -233,7 +233,7 @@ export default function BridgePage() {
         {(error || batchError) && <p className="text-sm text-danger">{writeErrorText(error ?? batchError)}</p>}
         {pot && (
           <Link href={`/pot/${pot}`} className="inline-block text-sm text-laterite">
-            Back to pot {pot} to fund after mint
+            Back to distribution {pot}
           </Link>
         )}
       </div>
