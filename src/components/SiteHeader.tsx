@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { BrandLogo } from "./BrandLogo";
 import { Avatar } from "./Avatar";
 import { FAUCET, EXPLORER } from "@/lib/chain";
 import { supabaseBrowser } from "@/lib/supabase";
@@ -23,7 +22,7 @@ function pictureOf(user: User | null, stored: string | null) {
 function nameOf(user: User | null, stored: string | null) {
   if (stored) return stored;
   const meta = user?.user_metadata as { full_name?: string; name?: string } | undefined;
-  return meta?.full_name || meta?.name || user?.email || "IPIN";
+  return meta?.full_name || meta?.name || user?.email || "You";
 }
 
 export function SiteHeader() {
@@ -39,7 +38,11 @@ export function SiteHeader() {
     const client = sb;
     async function load(next: User | null) {
       setUser(next);
-      if (!next) return;
+      if (!next) {
+        setOpen(false);
+        setMenu(false);
+        return;
+      }
       const row = await client.from("profiles").select("display_name,avatar_url").eq("id", next.id).maybeSingle();
       setStoredName(row.data?.display_name ?? null);
       setStoredPic(row.data?.avatar_url ?? null);
@@ -62,23 +65,21 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-ink/10 bg-ground/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-3 sm:px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <BrandLogo />
-          <span className="text-xl font-bold">IPIN</span>
-        </Link>
-        <nav className="hidden items-center gap-6 lg:flex">
-          <Link href="/" className="text-sm font-medium text-ink/80 hover:text-laterite">Home</Link>
-          {user && APP_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="text-sm font-medium text-ink/80 hover:text-laterite">{link.label}</Link>
-          ))}
-          {!user && <Link href="/account" className="btn-primary h-11 px-4 text-sm">Sign in</Link>}
-          {user && (
-            <button type="button" className="rounded-full" aria-label="Profile" onClick={() => setMenu((v) => !v)}>
+        <Link href="/" className="text-xl font-bold text-laterite">IPIN</Link>
+        {!user && <Link href="/account" className="btn-primary h-11 px-4 text-sm">Sign in</Link>}
+        {user && (
+          <div className="flex items-center gap-3">
+            <nav className="hidden items-center gap-6 lg:flex">
+              {APP_LINKS.map((link) => (
+                <Link key={link.href} href={link.href} className="text-sm font-medium text-ink/80 hover:text-laterite">{link.label}</Link>
+              ))}
+            </nav>
+            <button type="button" className="hidden rounded-full lg:inline-flex" aria-label="Profile" onClick={() => setMenu((v) => !v)}>
               <Avatar name={name} src={pic} />
             </button>
-          )}
-        </nav>
-        <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/15 lg:hidden" aria-label="Menu" onClick={() => setOpen((v) => !v)}>☰</button>
+            <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/15 lg:hidden" aria-label="Menu" onClick={() => setOpen((v) => !v)}>☰</button>
+          </div>
+        )}
       </div>
       {menu && user && (
         <div className="absolute right-6 top-16 z-50 hidden w-48 rounded-2xl border border-ink/10 bg-panel p-2 shadow-lg lg:block">
@@ -86,17 +87,15 @@ export function SiteHeader() {
           <button type="button" className="flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm text-danger" onClick={signOut}>Sign out</button>
         </div>
       )}
-      {open && (
+      {open && user && (
         <nav className="flex flex-col gap-1 border-t border-ink/10 px-5 py-4 lg:hidden">
-          <Link href="/" className="flex min-h-12 items-center" onClick={() => setOpen(false)}>Home</Link>
-          {user && APP_LINKS.map((link) => (
+          {APP_LINKS.map((link) => (
             <Link key={link.href} href={link.href} className="flex min-h-12 items-center" onClick={() => setOpen(false)}>{link.label}</Link>
           ))}
-          {user && <Link href="/account" className="flex min-h-12 items-center" onClick={() => setOpen(false)}>Profile</Link>}
-          {user && <button type="button" className="flex min-h-12 items-center text-left text-danger" onClick={signOut}>Sign out</button>}
-          {!user && <Link href="/account" className="btn-primary mt-2 w-full" onClick={() => setOpen(false)}>Sign in</Link>}
-          {user && <a href={FAUCET} target="_blank" rel="noreferrer" className="flex min-h-12 items-center">Faucet</a>}
-          {user && <a href={EXPLORER} target="_blank" rel="noreferrer" className="flex min-h-12 items-center">Explorer</a>}
+          <Link href="/account" className="flex min-h-12 items-center" onClick={() => setOpen(false)}>Profile</Link>
+          <a href={FAUCET} target="_blank" rel="noreferrer" className="flex min-h-12 items-center">Faucet</a>
+          <a href={EXPLORER} target="_blank" rel="noreferrer" className="flex min-h-12 items-center">Explorer</a>
+          <button type="button" className="flex min-h-12 items-center text-left text-danger" onClick={signOut}>Sign out</button>
         </nav>
       )}
     </header>

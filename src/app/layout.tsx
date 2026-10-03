@@ -19,7 +19,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "IPIN — Arc's distribution layer",
+  title: "IPIN \u2014 the distribution layer for Arc",
   description: "Create a pool. Fund it. Pay many people once. USDC settles on Arc.",
 };
 
