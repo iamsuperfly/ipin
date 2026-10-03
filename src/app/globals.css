@@ -9,9 +9,8 @@
   --color-laterite-deep: #9a3f16;
   --color-river: #2f6f6b;
   --color-danger: #b42318;
-  --font-display: var(--font-display);
-  --font-sans: var(--font-body);
-  --font-mono: var(--font-mono);
+  --font-sans: "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
 :root {
@@ -33,7 +32,7 @@ body {
   overflow-x: hidden;
   background: var(--color-ground);
   color: var(--color-ink);
-  font-family: var(--font-body), "Segoe UI", sans-serif;
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
   padding-bottom: env(safe-area-inset-bottom);
@@ -56,11 +55,11 @@ footer {
 }
 
 .font-display {
-  font-family: var(--font-display), Georgia, serif;
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
 .font-mono {
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
 .btn-primary {
@@ -160,4 +159,3 @@ footer {
 }
 
 .phrase { color: #007a66; }
-.font-display { font-family: var(--font-display), "DM Sans", sans-serif; }
