@@ -22,6 +22,7 @@ export default function AccountPage() {
   const [pic, setPic] = useState<string | null>(null);
   const [wallets, setWallets] = useState<WalletRow[]>([]);
   const [rows, setRows] = useState<Dist[]>([]);
+  const [people, setPeople] = useState(0);
   const [note, setNote] = useState("");
 
   async function refresh() {
@@ -37,6 +38,8 @@ export default function AccountPage() {
     setWallets((walletRows.data as WalletRow[]) ?? []);
     const list = await supabase.from("campaigns").select("id,name,pool_amount,status,pot_id").order("created_at", { ascending: false });
     setRows((list.data as Dist[]) ?? []);
+    const paid = await supabase.from("allocations").select("recipient").eq("paid", true);
+    setPeople(new Set((paid.data ?? []).map((row) => row.recipient)).size);
   }
 
   useEffect(() => { void refresh(); }, []);
@@ -97,6 +100,8 @@ export default function AccountPage() {
   const waiting = rows.filter((r) => r.status !== "done");
   const done = rows.filter((r) => r.status === "done");
   const active = wallets.find((w) => w.is_active);
+  const sent = done.reduce((sum, row) => sum + Number(row.pool_amount || 0), 0);
+  const waitingTotal = waiting.reduce((sum, row) => sum + Number(row.pool_amount || 0), 0);
 
   return (
     <main className="mx-auto max-w-2xl px-5 pb-24 pt-10">
@@ -123,6 +128,21 @@ export default function AccountPage() {
           <button type="button" className="btn-primary w-full" onClick={saveName}>Save</button>
         </div>
       )}
+
+      <section className="mt-8 grid grid-cols-3 gap-3">
+        <article className="rounded-2xl border border-ink/10 bg-panel p-4">
+          <p className="text-sm text-mute">Sent</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums">{sent}</p>
+        </article>
+        <article className="rounded-2xl border border-ink/10 bg-panel p-4">
+          <p className="text-sm text-mute">People</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums">{people}</p>
+        </article>
+        <article className="rounded-2xl border border-ink/10 bg-panel p-4">
+          <p className="text-sm text-mute">Waiting</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums">{waitingTotal}</p>
+        </article>
+      </section>
 
       <section className="mt-8">
         <p className="text-sm text-mute">Waiting</p>
