@@ -29,6 +29,7 @@ export default function PotPage() {
   const [amount, setAmount] = useState("1");
   const [batchNote, setBatchNote] = useState("");
   const [volume, setVolume] = useState(0n);
+  const [action, setAction] = useState("");
 
   const pot = useReadContract({
     address: contract,
@@ -51,10 +52,41 @@ export default function PotPage() {
   const { sendCalls, isPending: batching, error: batchError } = useSendCalls();
 
   useEffect(() => {
-    if (!isSuccess) return;
+    if (!isSuccess || !hash || action !== "pay") return;
     pot.refetch();
     roster.refetch();
-  }, [isSuccess, pot, roster]);
+    const sb = supabaseBrowser();
+    if (!sb) return;
+    sb.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const campaign = await sb.from("campaigns").select("id,pool_amount").eq("pot_id", Number(id)).maybeSingle();
+      const saved = campaign.data;
+      if (!saved?.id) return;
+      const members = roster.data?.[0] ?? [];
+      const shares = roster.data?.[1] ?? [];
+      const total = shares.reduce((sum, share) => sum + BigInt(share), 0n);
+      const pool = BigInt(Math.round(Number(saved.pool_amount) * 1_000_000));
+      if (members.length && total > 0n) {
+        await sb.from("allocations").insert(members.map((member, i) => ({
+          campaign_id: saved.id,
+          recipient: member.toLowerCase(),
+          amount: Number(formatUsdc((pool * BigInt(shares[i])) / total)),
+          tx_hash: hash,
+          paid: true,
+        })));
+      }
+      await sb.from("distributions").insert({
+        account_id: data.user.id,
+        campaign_id: saved.id,
+        pot_id: Number(id),
+        gross: saved.pool_amount,
+        fee: 0,
+        tx_hash: hash,
+        status: "done",
+      });
+      await sb.from("campaigns").update({ status: "done" }).eq("id", saved.id);
+    });
+  }, [isSuccess, hash, pot, roster, id]);
 
   useEffect(() => {
     const sb = supabaseBrowser();
@@ -198,6 +230,7 @@ export default function PotPage() {
                         address: contract,
                         abi: ipinAbi,
                         functionName: "pay",
+                        // mark
                         args: [id, m],
                       })
                     }
@@ -212,7 +245,7 @@ export default function PotPage() {
       </section>
 
       <section className="mt-8 rounded-3xl border border-ink/10 bg-panel p-6">
-        <h2 className="font-display text-2xl">Pour {symbol} in</h2>
+        <h2 className="font-display text-2xl">Fund this distribution</h2>
         <p className="mt-1 text-sm text-mute">Recipients get the amount. IPIN fee is a separate transfer to the fee wallet. One popup if the wallet batches.</p>
         <input
           value={amount}
@@ -228,7 +261,7 @@ export default function PotPage() {
               Approve only
             </button>
             <button type="button" className="btn-ghost w-full sm:col-span-2" disabled={busy || !contract} onClick={deposit}>
-              Fund pot
+              Fund
             </button>
           </div>
         ) : (
@@ -245,17 +278,18 @@ export default function PotPage() {
           type="button"
           className="btn-primary mt-6 w-full"
           disabled={busy || !contract}
-          onClick={() =>
+          onClick={() => {
+            setAction("pay");
             contract &&
-            writeContract({
-              address: contract,
-              abi: ipinAbi,
-              functionName: "payAll",
-              args: [id],
-            })
-          }
+              writeContract({
+                address: contract,
+                abi: ipinAbi,
+                functionName: "payAll",
+                args: [id],
+              });
+          }}
         >
-          Cut every unpaid share
+          Pay everyone
         </button>
       )}
 

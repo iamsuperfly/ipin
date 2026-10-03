@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { isAddress } from "viem";
-import { useAccount, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { decodeEventLog, isAddress } from "viem";
+import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { ConnectButton } from "@/components/ConnectButton";
 import { ipinAbi } from "@/lib/abi";
 import { ipinAddress } from "@/lib/contract";
@@ -27,13 +28,44 @@ function split(total: string, rows: Row[]): Row[] {
 }
 
 export default function DistributePage() {
+  const router = useRouter();
   const contract = ipinAddress();
+  const client = usePublicClient();
   const { isConnected } = useAccount();
   const [name, setName] = useState("");
   const [total, setTotal] = useState("100");
   const [rows, setRows] = useState<Row[]>([{ address: "", amount: "50", edited: false }, { address: "", amount: "50", edited: false }]);
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  useEffect(() => {
+    if (!isSuccess || !hash || !client || !contract) return;
+    let gone = false;
+    client.getTransactionReceipt({ hash }).then(async (receipt) => {
+      if (gone) return;
+      const created = receipt.logs
+        .map((log) => {
+          try {
+            return decodeEventLog({ abi: ipinAbi, data: log.data, topics: log.topics });
+          } catch {
+            return null;
+          }
+        })
+        .find((log) => log?.eventName === "PotCreated");
+      const potId = created && "args" in created ? created.args.id : null;
+      if (potId == null) return;
+      const sb = supabaseBrowser();
+      const user = sb ? (await sb.auth.getUser()).data.user : null;
+      if (sb && user) {
+        const row = await sb.from("campaigns").select("id").eq("account_id", user.id).is("pot_id", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (row.data?.id) await sb.from("campaigns").update({ pot_id: Number(potId) }).eq("id", row.data.id);
+      }
+      router.replace(`/pot/${potId.toString()}`);
+    });
+    return () => {
+      gone = true;
+    };
+  }, [isSuccess, hash, client, contract, router]);
 
   const even = useMemo(() => split(total, rows), [total, rows]);
   const pool = useMemo(() => even.reduce((sum, row) => sum + parseUsdc(row.amount || "0"), 0n), [even]);
@@ -81,7 +113,7 @@ export default function DistributePage() {
         {isConnected ? (
           <button type="button" className="btn-primary w-full" disabled={!contract || isPending || isLoading} onClick={submit}>{isPending || isLoading ? "Creating\u2026" : "Create distribution"}</button>
         ) : <ConnectButton className="w-full" />}
-        {isSuccess && <p className="text-sm text-mute">Created. It is now under Waiting. Open it to fund and pay.</p>}
+        {isSuccess && <p className="text-sm text-mute">Created. Opening it so you can fund and pay.</p>}
         {error && <p className="text-sm text-danger">{writeErrorText(error)}</p>}
       </div>
     </main>
