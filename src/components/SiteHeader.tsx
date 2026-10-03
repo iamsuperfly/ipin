@@ -8,8 +8,7 @@ import { FAUCET, EXPLORER } from "@/lib/chain";
 import { supabaseBrowser } from "@/lib/supabase";
 
 const APP_LINKS = [
-  { href: "/app", label: "App" },
-  { href: "/distribute", label: "Distribute" },
+  { href: "/distributions", label: "Distributions" },
   { href: "/bridge", label: "Bridge USDC" },
 ];
 

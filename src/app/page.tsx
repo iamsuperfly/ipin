@@ -12,6 +12,7 @@ const RECIPIENTS = [
 ];
 
 const PILLS = ["Pool", "Recipient list", "Amounts", "Paid once", "Arc settlement"];
+const PHASES = ["Ready", "Distributing", "Settling on Arc", "Settled"];
 
 export default function LandingPage() {
   const [phase, setPhase] = useState(0);
@@ -48,18 +49,19 @@ export default function LandingPage() {
           <h1 className="text-4xl font-bold leading-tight sm:text-5xl">Distribute to many people<br /><span className="phrase">on Arc</span></h1>
           <p className="mt-5 max-w-xl text-lg text-mute">One pool. Many people. <span className="phrase">USDC settles on Arc.</span> Recipients get the full allocation. You pay the fee on top.</p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href="/distribute" className="btn-primary w-full sm:w-auto">Create a distribution</Link>
+            <Link href="/distributions" className="btn-primary w-full sm:w-auto">Create a distribution</Link>
             {!signedIn && <Link href="/account" className="btn-ghost w-full sm:w-auto">Sign in</Link>}
           </div>
         </div>
 
-        <div className="h-[22rem] overflow-hidden rounded-3xl border border-ink/10 bg-panel p-6">
+        <div className="overflow-hidden rounded-3xl border border-ink/10 bg-panel p-6">
           <p className="text-sm text-mute">Pool</p>
-          <p className="h-14 text-5xl font-bold tabular-nums">{count.toLocaleString()} USDC</p>
-          <p className="mt-2 h-5 text-sm text-laterite">{phase === 0 ? "Ready" : phase === 1 ? "Distributing" : phase === 2 ? "Settling on Arc" : "Settled"}</p>
-          <div className="mt-6 space-y-3">
+          <p className="mt-1 text-5xl font-bold leading-none tabular-nums">{count.toLocaleString()}</p>
+          <p className="mt-1 text-sm text-mute">USDC</p>
+          <p className="mt-3 h-5 text-sm text-laterite transition-opacity">{PHASES[phase]}</p>
+          <div className="mt-4 space-y-3">
             {RECIPIENTS.map((r, i) => (
-              <div key={r.name} className="flex items-center justify-between rounded-2xl border border-ink/10 px-4 py-3" style={{ opacity: phase === 0 ? 0.45 : 1, transition: `opacity 0.5s ${i * 80}ms` }}>
+              <div key={r.name} className="flex items-center justify-between rounded-2xl border border-ink/10 px-4 py-3" style={{ opacity: phase === 0 ? 0.45 : 1, transition: `opacity 0.45s ${i * 70}ms` }}>
                 <span>{r.name}</span>
                 <span className="font-mono">{phase >= 2 ? r.amount : "\u2014"} USDC</span>
               </div>
@@ -71,12 +73,12 @@ export default function LandingPage() {
       <section className="mt-24 grid gap-6 lg:grid-cols-2">
         <article className="rounded-3xl border border-ink/10 bg-panel p-6">
           <h2 className="text-3xl font-bold">By hand</h2>
-          <p className="mt-4 font-mono text-sm text-mute">Wallet \u2192 Ada \u2192 Kunle \u2192 Mara \u2192 Ife \u2192 \u2026</p>
+          <p className="mt-4 font-mono text-sm text-mute">Wallet → Ada → Kunle → Mara → Ife …</p>
           <p className="mt-3 text-mute">Every person is a separate send. Miss one, pay twice, lose the thread.</p>
         </article>
         <article className="rounded-3xl border border-laterite/40 bg-panel p-6">
           <h2 className="text-3xl font-bold">In one send</h2>
-          <p className="mt-4 font-mono text-sm">Wallet \u2192 the pool \u2192 everyone</p>
+          <p className="mt-4 font-mono text-sm">Wallet → the pool → everyone</p>
           <p className="mt-3 text-mute">One distribution. Amounts stay whole. Paid once.</p>
         </article>
       </section>
@@ -85,9 +87,9 @@ export default function LandingPage() {
         <h2 className="text-4xl font-bold">Create. Fund. Distribute. Verify.</h2>
         <ol className="mt-8 grid gap-4 sm:grid-cols-4">
           {[
-            ["Create", "Name the distribution. Paste addresses and USDC amounts."],
+            ["Create", "Name it. Paste addresses. The total splits equally."],
             ["Fund", "You send the pool plus the fee. They are not the same number."],
-            ["Distribute", "The contract pays each address once."],
+            ["Distribute", "Each address is paid once."],
             ["Verify", "The Arc transaction is the record."],
           ].map(([t, d]) => (
             <li key={t} className="rounded-3xl border border-ink/10 bg-panel p-5">
@@ -105,7 +107,7 @@ export default function LandingPage() {
             <span key={pill} className="rounded-full border border-ink/10 bg-panel px-4 py-2 text-sm">{pill}</span>
           ))}
         </div>
-        <Link href="/distribute" className="btn-primary mt-6 inline-flex">Start on Arc testnet</Link>
+        <Link href="/distributions" className="btn-primary mt-6 inline-flex">Start on Arc testnet</Link>
       </section>
     </main>
   );

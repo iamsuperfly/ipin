@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
@@ -8,6 +9,7 @@ import { supabaseBrowser } from "@/lib/supabase";
 import { shortAddr } from "@/lib/format";
 
 type WalletRow = { id: string; address: string; is_active: boolean };
+type Dist = { id: string; name: string; pool_amount: number; status: string; pot_id: number | null };
 
 export default function AccountPage() {
   const supabase = supabaseBrowser();
@@ -15,9 +17,11 @@ export default function AccountPage() {
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
   const [user, setUser] = useState<User | null>(null);
+  const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [pic, setPic] = useState<string | null>(null);
   const [wallets, setWallets] = useState<WalletRow[]>([]);
+  const [rows, setRows] = useState<Dist[]>([]);
   const [note, setNote] = useState("");
 
   async function refresh() {
@@ -29,8 +33,10 @@ export default function AccountPage() {
     const meta = data.user.user_metadata as { full_name?: string; name?: string; avatar_url?: string; picture?: string };
     setName(row.data?.display_name || meta.full_name || meta.name || "");
     setPic(row.data?.avatar_url || meta.avatar_url || meta.picture || null);
-    const rows = await supabase.from("wallets").select("id,address,is_active").order("created_at");
-    setWallets((rows.data as WalletRow[]) ?? []);
+    const walletRows = await supabase.from("wallets").select("id,address,is_active").order("created_at");
+    setWallets((walletRows.data as WalletRow[]) ?? []);
+    const list = await supabase.from("campaigns").select("id,name,pool_amount,status,pot_id").order("created_at", { ascending: false });
+    setRows((list.data as Dist[]) ?? []);
   }
 
   useEffect(() => { void refresh(); }, []);
@@ -40,16 +46,14 @@ export default function AccountPage() {
       setNote("Sign-in is not configured.");
       return;
     }
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
+    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/auth/callback` } });
   }
 
   async function saveName() {
     if (!supabase || !user) return;
     await supabase.from("profiles").upsert({ id: user.id, email: user.email, display_name: name });
-    setNote("Name saved.");
+    setEditing(false);
+    setNote("Saved.");
   }
 
   async function onFile(file: File) {
@@ -64,7 +68,6 @@ export default function AccountPage() {
     const stamped = `${url}?v=${Date.now()}`;
     await supabase.from("profiles").upsert({ id: user.id, email: user.email, avatar_url: stamped });
     setPic(stamped);
-    setNote("Picture saved.");
   }
 
   async function attach() {
@@ -91,41 +94,71 @@ export default function AccountPage() {
     );
   }
 
+  const waiting = rows.filter((r) => r.status !== "done");
+  const done = rows.filter((r) => r.status === "done");
+  const active = wallets.find((w) => w.is_active);
+
   return (
     <main className="mx-auto max-w-2xl px-5 pb-24 pt-10">
-      <div className="flex items-center gap-4">
-        <Avatar name={name || user.email || "I"} src={pic} size={72} />
-        <div>
-          <h1 className="text-4xl font-bold">{name || "Profile"}</h1>
-          <p className="text-mute">{user.email}</p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Avatar name={name || user.email || "I"} src={pic} size={72} />
+          <div>
+            <h1 className="text-4xl font-bold">{name || "Profile"}</h1>
+            <p className="text-mute">{user.email}</p>
+            <p className="mt-1 font-mono text-sm">{active ? shortAddr(active.address) : "No active wallet"}</p>
+          </div>
         </div>
+        <button type="button" className="btn-ghost h-11 px-4 text-sm" onClick={() => setEditing((v) => !v)}>{editing ? "Close" : "Edit"}</button>
       </div>
-      <div className="mt-8 space-y-4 rounded-3xl border border-ink/10 bg-panel p-6">
-        <label className="block text-sm text-mute">Picture
-          <input type="file" accept="image/*" className="mt-2 block w-full text-sm" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
-        </label>
-        <label className="block text-sm text-mute">Name
-          <input value={name} onChange={(e) => setName(e.target.value)} className="mt-2 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 outline-none focus:border-laterite" />
-        </label>
-        <button type="button" className="btn-primary w-full" onClick={saveName}>Save profile</button>
+
+      {editing && (
+        <div className="mt-8 space-y-4 rounded-3xl border border-ink/10 bg-panel p-6">
+          <label className="block text-sm text-mute">Picture
+            <input type="file" accept="image/*" className="mt-2 block w-full text-sm" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+          </label>
+          <label className="block text-sm text-mute">Name
+            <input value={name} onChange={(e) => setName(e.target.value)} className="mt-2 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 outline-none focus:border-laterite" />
+          </label>
+          <button type="button" className="btn-primary w-full" onClick={saveName}>Save</button>
+        </div>
+      )}
+
+      <section className="mt-8">
+        <p className="text-sm text-mute">Waiting</p>
+        <ul className="mt-3 space-y-3">
+          {waiting.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">Nothing waiting.</li>}
+          {waiting.map((r) => (
+            <li key={r.id}><Link href={r.pot_id ? `/pot/${r.pot_id}` : "/distributions"} className="flex items-center justify-between rounded-2xl border border-ink/10 bg-panel px-4 py-4"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link></li>
+          ))}
+        </ul>
+      </section>
+      <section className="mt-8">
+        <p className="text-sm text-mute">Done</p>
+        <ul className="mt-3 space-y-3">
+          {done.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">None completed yet.</li>}
+          {done.map((r) => (
+            <li key={r.id}><Link href={r.pot_id ? `/pot/${r.pot_id}` : "/distributions"} className="flex items-center justify-between rounded-2xl border border-ink/10 bg-panel px-4 py-4"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link></li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mt-8 space-y-3">
+        <p className="text-sm text-mute">Wallets</p>
         {isConnected ? (
           <button type="button" className="btn-ghost w-full" onClick={() => disconnect()}>Disconnect {shortAddr(address)}</button>
         ) : (
           <button type="button" className="btn-ghost w-full" onClick={() => connectors[0] && connect({ connector: connectors[0] })}>Connect wallet</button>
         )}
         <button type="button" className="btn-ghost w-full" onClick={attach} disabled={!isConnected}>Attach connected wallet</button>
-        {note && <p className="text-sm text-mute">{note}</p>}
-      </div>
-      <ul className="mt-6 space-y-3">
         {wallets.map((w) => (
-          <li key={w.id} className="flex items-center justify-between rounded-2xl border border-ink/10 bg-panel px-4 py-3">
+          <div key={w.id} className="flex items-center justify-between rounded-2xl border border-ink/10 bg-panel px-4 py-3">
             <span className="font-mono text-sm">{shortAddr(w.address)}</span>
-            {w.is_active ? <span className="text-sm text-laterite">Active</span> : (
-              <button type="button" className="btn-ghost h-11 px-4 text-sm" onClick={() => makeActive(w.id)}>Make active</button>
-            )}
-          </li>
+            {w.is_active ? <span className="text-sm text-laterite">Active</span> : <button type="button" className="btn-ghost h-11 px-4 text-sm" onClick={() => makeActive(w.id)}>Make active</button>}
+          </div>
         ))}
-      </ul>
+        {note && <p className="text-sm text-mute">{note}</p>}
+      </section>
     </main>
   );
 }
