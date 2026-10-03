@@ -32,7 +32,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   async function google() {
     const sb = supabaseBrowser();
     if (!sb) {
-      setNote("Sign-in is not configured.");
+      setNote("Couldn't sign in. Try again.");
       return;
     }
     await sb.auth.signInWithOAuth({
