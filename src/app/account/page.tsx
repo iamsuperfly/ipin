@@ -39,7 +39,7 @@ export default function AccountPage() {
     const list = await supabase.from("campaigns").select("id,name,pool_amount,status,pot_id").order("created_at", { ascending: false });
     setRows((list.data as Dist[]) ?? []);
     const paid = await supabase.from("allocations").select("recipient").eq("paid", true);
-    setPeople(new Set((paid.data ?? []).map((row) => row.recipient)).size);
+    setPeople(new Set((paid.data ?? []).map((item) => item.recipient)).size);
   }
 
   useEffect(() => { void refresh(); }, []);
@@ -89,7 +89,7 @@ export default function AccountPage() {
 
   if (!user) {
     return (
-      <main className="mx-auto max-w-lg px-5 pb-24 pt-16">
+      <main className="mx-auto max-w-lg px-5 pb-24 pt-8">
         <h1 className="text-4xl font-bold">Sign in</h1>
         <button type="button" className="btn-primary mt-6 w-full" onClick={google}>Continue with Google</button>
         {note && <p className="mt-3 text-sm text-mute">{note}</p>}
@@ -104,21 +104,19 @@ export default function AccountPage() {
   const waitingTotal = waiting.reduce((sum, row) => sum + Number(row.pool_amount || 0), 0);
 
   return (
-    <main className="mx-auto max-w-2xl px-5 pb-24 pt-10">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Avatar name={name || user.email || "I"} src={pic} size={72} />
-          <div>
-            <h1 className="text-4xl font-bold">{name || "Profile"}</h1>
-            <p className="text-mute">{user.email}</p>
-            <p className="mt-1 font-mono text-sm">{active ? shortAddr(active.address) : "No active wallet"}</p>
-          </div>
+    <main className="mx-auto max-w-2xl px-5 pb-24 pt-8">
+      <div className="flex items-center gap-4">
+        <Avatar name={name || user.email || "I"} src={pic} size={72} />
+        <div className="min-w-0">
+          <h1 className="truncate text-3xl font-bold">{name || "Profile"}</h1>
+          <p className="truncate text-mute">{user.email}</p>
+          <p className="mt-1 font-mono text-sm">{active ? shortAddr(active.address) : "No active wallet"}</p>
         </div>
-        <button type="button" className="btn-ghost h-11 px-4 text-sm" onClick={() => setEditing((v) => !v)}>{editing ? "Close" : "Edit"}</button>
       </div>
+      <button type="button" className="btn-ghost mt-4 h-11 w-full text-sm" onClick={() => setEditing((v) => !v)}>{editing ? "Close" : "Edit"}</button>
 
       {editing && (
-        <div className="mt-8 space-y-4 rounded-3xl border border-ink/10 bg-panel p-6">
+        <div className="mt-4 space-y-4 rounded-3xl border border-ink/10 bg-panel p-6">
           <label className="block text-sm text-mute">Picture
             <input type="file" accept="image/*" className="mt-2 block w-full text-sm" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
           </label>
@@ -149,7 +147,16 @@ export default function AccountPage() {
         <ul className="mt-3 space-y-3">
           {waiting.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">Nothing waiting.</li>}
           {waiting.map((r) => (
-            <li key={r.id}><Link href={r.pot_id ? `/pot/${r.pot_id}` : "/distributions"} className="flex items-center justify-between rounded-2xl border border-ink/10 bg-panel px-4 py-4"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link></li>
+            <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
+              {r.pot_id ? (
+                <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>
+                  <p className="mt-2 text-sm text-mute">Not on Arc yet. Create it again to fund and pay.</p>
+                </div>
+              )}
+            </li>
           ))}
         </ul>
       </section>
@@ -158,7 +165,13 @@ export default function AccountPage() {
         <ul className="mt-3 space-y-3">
           {done.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">None completed yet.</li>}
           {done.map((r) => (
-            <li key={r.id}><Link href={r.pot_id ? `/pot/${r.pot_id}` : "/distributions"} className="flex items-center justify-between rounded-2xl border border-ink/10 bg-panel px-4 py-4"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link></li>
+            <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
+              {r.pot_id ? (
+                <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
+              ) : (
+                <div className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>
+              )}
+            </li>
           ))}
         </ul>
       </section>

@@ -62,7 +62,7 @@ export function SiteHeader() {
   const pic = pictureOf(user, storedPic);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-ink/10 bg-ground/90 backdrop-blur-md">
+    <header className="z-40 border-b border-ink/10 bg-ground/95 backdrop-blur-md lg:sticky lg:top-0">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-3 sm:px-6">
         <Link href="/" className="text-xl font-bold text-laterite">IPIN</Link>
         {!user && <Link href="/account" className="btn-primary h-11 px-4 text-sm">Sign in</Link>}
