@@ -87,6 +87,16 @@ export default function AccountPage() {
     await refresh();
   }
 
+  async function remove(id: string) {
+    if (!supabase) return;
+    const gone = await supabase.from("campaigns").delete().eq("id", id);
+    if (gone.error) {
+      setNote("Couldn't remove that. Try again.");
+      return;
+    }
+    setRows((current) => current.filter((row) => row.id !== id));
+  }
+
   if (!user) {
     return (
       <main className="mx-auto max-w-lg px-5 pb-24 pt-8">
@@ -156,6 +166,7 @@ export default function AccountPage() {
                   <p className="mt-2 text-sm text-mute">Not on Arc yet. Create it again to fund and pay.</p>
                 </div>
               )}
+              <button type="button" className="mt-3 text-sm text-danger" onClick={() => remove(r.id)}>Delete</button>
             </li>
           ))}
         </ul>

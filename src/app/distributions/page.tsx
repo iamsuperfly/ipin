@@ -6,42 +6,32 @@ import { supabaseBrowser } from "@/lib/supabase";
 
 type Row = { id: string; name: string; pool_amount: number; status: string; pot_id: number | null };
 
-function RowCard({ row }: { row: Row }) {
-  const body = (
-    <div className="flex items-center justify-between gap-3">
-      <span className="font-medium">{row.name}</span>
-      <span className="font-mono text-sm">{row.pool_amount} USDC</span>
-    </div>
-  );
-  if (!row.pot_id) {
-    return (
-      <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
-        {body}
-        <p className="mt-2 text-sm text-mute">Not on Arc yet. Create it again to fund and pay.</p>
-      </li>
-    );
-  }
-  return (
-    <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
-      <Link href={`/pot/${row.pot_id}`}>{body}</Link>
-    </li>
-  );
-}
-
 export default function DistributionsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [note, setNote] = useState("");
 
-  useEffect(() => {
+  async function load() {
     const sb = supabaseBrowser();
     if (!sb) return;
-    sb.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
-      const list = await sb.from("campaigns").select("id,name,pool_amount,status,pot_id").order("created_at", { ascending: false });
-      if (list.error) setNote("Couldn't load your distributions. Try again.");
-      setRows((list.data as Row[]) ?? []);
-    });
-  }, []);
+    const { data } = await sb.auth.getUser();
+    if (!data.user) return;
+    const list = await sb.from("campaigns").select("id,name,pool_amount,status,pot_id").order("created_at", { ascending: false });
+    if (list.error) setNote("Couldn't load your distributions. Try again.");
+    setRows((list.data as Row[]) ?? []);
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  async function remove(id: string) {
+    const sb = supabaseBrowser();
+    if (!sb) return;
+    const gone = await sb.from("campaigns").delete().eq("id", id);
+    if (gone.error) {
+      setNote("Couldn't remove that. Try again.");
+      return;
+    }
+    setRows((current) => current.filter((row) => row.id !== id));
+  }
 
   const waiting = rows.filter((r) => r.status !== "done");
   const done = rows.filter((r) => r.status === "done");
@@ -56,14 +46,32 @@ export default function DistributionsPage() {
         <p className="text-sm text-mute">Waiting</p>
         <ul className="mt-3 space-y-3">
           {waiting.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">Nothing waiting.</li>}
-          {waiting.map((r) => <RowCard key={r.id} row={r} />)}
+          {waiting.map((r) => (
+            <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
+              {r.pot_id ? (
+                <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between gap-3"><span className="font-medium">{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
+              ) : (
+                <div className="flex items-center justify-between gap-3"><span className="font-medium">{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>
+              )}
+              {!r.pot_id && <p className="mt-2 text-sm text-mute">Not on Arc yet. Create it again to fund and pay.</p>}
+              <button type="button" className="mt-3 text-sm text-danger" onClick={() => remove(r.id)}>Delete</button>
+            </li>
+          ))}
         </ul>
       </section>
       <section className="mt-8">
         <p className="text-sm text-mute">Done</p>
         <ul className="mt-3 space-y-3">
           {done.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">None completed yet.</li>}
-          {done.map((r) => <RowCard key={r.id} row={r} />)}
+          {done.map((r) => (
+            <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
+              {r.pot_id ? (
+                <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between gap-3"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
+              ) : (
+                <div className="flex items-center justify-between gap-3"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>
+              )}
+            </li>
+          ))}
         </ul>
       </section>
       {note && <p className="mt-4 text-sm text-mute">{note}</p>}
