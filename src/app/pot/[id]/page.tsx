@@ -3,11 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { encodeFunctionData } from "viem";
 import {
   useAccount,
   useReadContract,
-  useSendCalls,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
@@ -16,7 +14,6 @@ import { erc20Abi, ipinAbi } from "@/lib/abi";
 import { explorerAddress, explorerTx } from "@/lib/chain";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
-import { FEE_WALLET, quoteFee } from "@/lib/fee";
 import { formatUsdc, parseUsdc, shortAddr } from "@/lib/format";
 import { supabaseBrowser } from "@/lib/supabase";
 import { USDC, tokenSymbol } from "@/lib/tokens";
@@ -28,7 +25,6 @@ export default function PotPage() {
   const { address, isConnected } = useAccount();
   const [amount, setAmount] = useState("5");
   const [note, setNote] = useState("");
-  const [volume, setVolume] = useState(0n);
   const [action, setAction] = useState("");
 
   const pot = useReadContract({
@@ -38,7 +34,6 @@ export default function PotPage() {
     args: [id],
     query: { enabled: Boolean(contract && params.id) },
   });
-
   const roster = useReadContract({
     address: contract,
     abi: ipinAbi,
@@ -46,7 +41,6 @@ export default function PotPage() {
     args: [id],
     query: { enabled: Boolean(contract && params.id) },
   });
-
   const walletUsdc = useReadContract({
     address: USDC,
     abi: erc20Abi,
@@ -54,26 +48,36 @@ export default function PotPage() {
     args: address ? [address] : undefined,
     query: { enabled: Boolean(address) },
   });
+  const allowance = useReadContract({
+    address: USDC,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: address && contract ? [address, contract] : undefined,
+    query: { enabled: Boolean(address && contract) },
+  });
 
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: waiting, isSuccess } = useWaitForTransactionReceipt({ hash });
-  const { sendCalls, isPending: batching, error: batchError } = useSendCalls();
 
   useEffect(() => {
-    if (!isSuccess || !hash) return;
+    if (!isSuccess || !hash || !contract) return;
     pot.refetch();
     roster.refetch();
     walletUsdc.refetch();
+    allowance.refetch();
     if (action === "approve") {
       setAction("fund");
-      setNote("Approved. Confirm the fund.");
-      if (!contract) return;
+      setNote("Approved. Confirm the fund in the wallet.");
       writeContract({
         address: contract,
         abi: ipinAbi,
         functionName: "fund",
         args: [id, parseUsdc(amount)],
       });
+      return;
+    }
+    if (action === "fund") {
+      setNote("Fund sent. The balance updates when Arc confirms.");
       return;
     }
     if (action !== "pay") return;
@@ -108,21 +112,9 @@ export default function PotPage() {
       });
       await sb.from("campaigns").update({ status: "done" }).eq("id", saved.id);
     });
-  }, [isSuccess, hash, action, amount, contract, id, pot, roster, walletUsdc]);
+  }, [isSuccess, hash, action, amount, contract, id, pot, roster, walletUsdc, allowance]);
 
-  useEffect(() => {
-    const sb = supabaseBrowser();
-    if (!sb) return;
-    const month = new Date().toISOString().slice(0, 7);
-    sb.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
-      const row = await sb.from("fee_ledger").select("volume").eq("account_id", data.user.id).eq("month", month).maybeSingle();
-      const raw = row.data?.volume;
-      if (raw != null) setVolume(BigInt(Math.round(Number(raw) * 1_000_000)));
-    });
-  }, []);
-
-  const busy = isPending || waiting || batching;
+  const busy = isPending || waiting;
   const data = pot.data;
   const owner = data?.[0];
   const name = data?.[1];
@@ -134,12 +126,11 @@ export default function PotPage() {
   const isOwner = Boolean(address && owner && address.toLowerCase() === owner.toLowerCase());
   const walletBalance = (walletUsdc.data ?? 0n) as bigint;
   const canPay = balance > 0n;
-
   const members = roster.data?.[0] ?? [];
   const shares = roster.data?.[1] ?? [];
   const paidFlags = roster.data?.[2] ?? [];
 
-  async function fundOnce() {
+  function fundOnce() {
     if (!contract || !token) return;
     const units = parseUsdc(amount);
     if (units === 0n) {
@@ -150,52 +141,26 @@ export default function PotPage() {
       setNote("The wallet does not have enough USDC on Arc.");
       return;
     }
-    const quote = quoteFee(volume, units);
-    setNote("");
-    const calls = [
-      {
-        to: token,
-        data: encodeFunctionData({
-          abi: erc20Abi,
-          functionName: "approve",
-          args: [contract, units],
-        }),
-      },
-      {
-        to: contract,
-        data: encodeFunctionData({
-          abi: ipinAbi,
-          functionName: "fund",
-          args: [id, units],
-        }),
-      },
-    ];
-    if (quote.fee > 0n) {
-      calls.push({
-        to: token,
-        data: encodeFunctionData({
-          abi: erc20Abi,
-          functionName: "transfer",
-          args: [FEE_WALLET, quote.fee],
-        }),
-      });
-    }
-    try {
-      setAction("batch");
-      await sendCalls({ calls });
-      setNote("Approved and funded.");
-      pot.refetch();
-      walletUsdc.refetch();
-    } catch {
+    const allowed = (allowance.data ?? 0n) as bigint;
+    if (allowed < units) {
       setAction("approve");
-      setNote("Confirm the approval. The fund comes next.");
+      setNote("Confirm the approval. The fund is the next wallet prompt.");
       writeContract({
         address: token,
         abi: erc20Abi,
         functionName: "approve",
         args: [contract, units],
       });
+      return;
     }
+    setAction("fund");
+    setNote("Confirm the fund in the wallet.");
+    writeContract({
+      address: contract,
+      abi: ipinAbi,
+      functionName: "fund",
+      args: [id, units],
+    });
   }
 
   return (
@@ -210,7 +175,6 @@ export default function PotPage() {
           </a>
         )}
       </p>
-
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
         <div className="rounded-3xl border border-ink/10 bg-panel p-6">
           <p className="text-sm text-mute">In the distribution</p>
@@ -221,7 +185,6 @@ export default function PotPage() {
           <p className="mt-2 text-4xl font-bold tabular-nums">{isConnected ? formatUsdc(walletBalance) : "-"} USDC</p>
         </div>
       </div>
-
       <section className="mt-8 space-y-3">
         {members.map((m, i) => {
           const sh = shares[i] ?? 0n;
@@ -230,68 +193,37 @@ export default function PotPage() {
           return (
             <div key={m} className="rounded-2xl border border-ink/10 bg-panel p-4">
               <div className="flex items-center justify-between gap-3">
-                <a className="font-mono text-sm hover:text-laterite" href={explorerAddress(m)} target="_blank" rel="noreferrer">
-                  {shortAddr(m)}
-                </a>
+                <a className="font-mono text-sm hover:text-laterite" href={explorerAddress(m)} target="_blank" rel="noreferrer">{shortAddr(m)}</a>
                 {done ? <span className="text-sm font-semibold text-laterite">Paid</span> : <span className="text-sm text-mute">Unpaid</span>}
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-ground">
-                <div className="h-full bg-laterite" style={{ width: `${pct}%` }} />
-              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-ground"><div className="h-full bg-laterite" style={{ width: `${pct}%` }} /></div>
               <p className="mt-2 text-sm text-mute">{pct}%</p>
             </div>
           );
         })}
       </section>
-
       <section className="mt-8 rounded-3xl border border-ink/10 bg-panel p-6">
         <h2 className="text-2xl font-bold">Fund</h2>
-        <p className="mt-1 text-sm text-mute">This approves the contract, then moves the USDC in. Pay stays off until that lands.</p>
-        <input
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="mt-4 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite"
-        />
+        <p className="mt-1 text-sm text-mute">Rabby needs two confirms. First the approval, then the fund. Pay stays off until Arc shows a balance.</p>
+        <input value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-4 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite" />
         {isConnected ? (
           <button type="button" className="btn-primary mt-4 w-full" disabled={busy || !contract} onClick={fundOnce}>
             {busy ? "Confirm in the wallet" : "Approve and fund"}
           </button>
-        ) : (
-          <ConnectButton className="mt-4 w-full" />
-        )}
+        ) : <ConnectButton className="mt-4 w-full" />}
         {note && <p className="mt-3 text-sm text-mute">{note}</p>}
-        <Link href={`/bridge?pot=${params.id}`} className="mt-4 inline-block text-sm text-laterite">
-          USDC is on another chain
-        </Link>
+        <Link href={`/bridge?pot=${params.id}`} className="mt-4 inline-block text-sm text-laterite">USDC is on another chain</Link>
       </section>
-
       {isOwner && (
-        <button
-          type="button"
-          className="btn-primary mt-6 w-full"
-          disabled={busy || !contract || !canPay}
-          onClick={() => {
-            setAction("pay");
-            contract && writeContract({
-              address: contract,
-              abi: ipinAbi,
-              functionName: "payAll",
-              args: [id],
-            });
-          }}
-        >
+        <button type="button" className="btn-primary mt-6 w-full" disabled={busy || !contract || !canPay} onClick={() => {
+          setAction("pay");
+          contract && writeContract({ address: contract, abi: ipinAbi, functionName: "payAll", args: [id] });
+        }}>
           {canPay ? "Pay everyone" : "Pay everyone after it is funded"}
         </button>
       )}
-
-      {hash && (
-        <a className="mt-4 inline-block font-mono text-sm text-laterite" href={explorerTx(hash)} target="_blank" rel="noreferrer">
-          View transaction
-        </a>
-      )}
-      {(error || batchError) && (
-        <p className="mt-3 text-sm text-danger">{writeErrorText(error ?? batchError)}</p>
-      )}
+      {hash && <a className="mt-4 inline-block font-mono text-sm text-laterite" href={explorerTx(hash)} target="_blank" rel="noreferrer">View transaction</a>}
+      {error && <p className="mt-3 text-sm text-danger">{writeErrorText(error)}</p>}
     </main>
   );
 }
