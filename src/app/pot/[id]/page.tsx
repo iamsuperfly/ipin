@@ -14,6 +14,7 @@ import { erc20Abi, ipinAbi } from "@/lib/abi";
 import { explorerAddress, explorerTx } from "@/lib/chain";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
+import { nextFundStep } from "@/lib/fund";
 import { formatUsdc, parseUsdc, shortAddr } from "@/lib/format";
 import { supabaseBrowser } from "@/lib/supabase";
 import { USDC, tokenSymbol } from "@/lib/tokens";
@@ -133,16 +134,16 @@ export default function PotPage() {
   function fundOnce() {
     if (!contract || !token) return;
     const units = parseUsdc(amount);
-    if (units === 0n) {
+    const step = nextFundStep(walletBalance, units, (allowance.data ?? 0n) as bigint);
+    if (step === "amount") {
       setNote("Enter an amount first.");
       return;
     }
-    if (walletBalance < units) {
+    if (step === "short") {
       setNote("The wallet does not have enough USDC on Arc.");
       return;
     }
-    const allowed = (allowance.data ?? 0n) as bigint;
-    if (allowed < units) {
+    if (step === "approve") {
       setAction("approve");
       setNote("Confirm the approval. The fund is the next wallet prompt.");
       writeContract({
