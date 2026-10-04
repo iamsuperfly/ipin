@@ -19,15 +19,15 @@ import { writeErrorText } from "@/lib/errors";
 import { FEE_WALLET, quoteFee } from "@/lib/fee";
 import { formatUsdc, parseUsdc, shortAddr } from "@/lib/format";
 import { supabaseBrowser } from "@/lib/supabase";
-import { tokenSymbol } from "@/lib/tokens";
+import { USDC, tokenSymbol } from "@/lib/tokens";
 
 export default function PotPage() {
   const params = useParams<{ id: string }>();
   const id = BigInt(params.id || "0");
   const contract = ipinAddress();
   const { address, isConnected } = useAccount();
-  const [amount, setAmount] = useState("1");
-  const [batchNote, setBatchNote] = useState("");
+  const [amount, setAmount] = useState("5");
+  const [note, setNote] = useState("");
   const [volume, setVolume] = useState(0n);
   const [action, setAction] = useState("");
 
@@ -47,14 +47,36 @@ export default function PotPage() {
     query: { enabled: Boolean(contract && params.id) },
   });
 
+  const walletUsdc = useReadContract({
+    address: USDC,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: waiting, isSuccess } = useWaitForTransactionReceipt({ hash });
   const { sendCalls, isPending: batching, error: batchError } = useSendCalls();
 
   useEffect(() => {
-    if (!isSuccess || !hash || action !== "pay") return;
+    if (!isSuccess || !hash) return;
     pot.refetch();
     roster.refetch();
+    walletUsdc.refetch();
+    if (action === "approve") {
+      setAction("fund");
+      setNote("Approved. Confirm the fund.");
+      if (!contract) return;
+      writeContract({
+        address: contract,
+        abi: ipinAbi,
+        functionName: "fund",
+        args: [id, parseUsdc(amount)],
+      });
+      return;
+    }
+    if (action !== "pay") return;
     const sb = supabaseBrowser();
     if (!sb) return;
     sb.auth.getUser().then(async ({ data }) => {
@@ -86,7 +108,7 @@ export default function PotPage() {
       });
       await sb.from("campaigns").update({ status: "done" }).eq("id", saved.id);
     });
-  }, [isSuccess, hash, pot, roster, id]);
+  }, [isSuccess, hash, action, amount, contract, id, pot, roster, walletUsdc]);
 
   useEffect(() => {
     const sb = supabaseBrowser();
@@ -107,9 +129,11 @@ export default function PotPage() {
   const token = data?.[2];
   const totalShares = data?.[4] ?? 0n;
   const round = data?.[5] ?? 0;
-  const balance = data?.[6] ?? 0n;
+  const balance = (data?.[6] ?? 0n) as bigint;
   const symbol = tokenSymbol(token);
   const isOwner = Boolean(address && owner && address.toLowerCase() === owner.toLowerCase());
+  const walletBalance = (walletUsdc.data ?? 0n) as bigint;
+  const canPay = balance > 0n;
 
   const members = roster.data?.[0] ?? [];
   const shares = roster.data?.[1] ?? [];
@@ -118,8 +142,16 @@ export default function PotPage() {
   async function fundOnce() {
     if (!contract || !token) return;
     const units = parseUsdc(amount);
+    if (units === 0n) {
+      setNote("Enter an amount first.");
+      return;
+    }
+    if (walletBalance < units) {
+      setNote("The wallet does not have enough USDC on Arc.");
+      return;
+    }
     const quote = quoteFee(volume, units);
-    setBatchNote("");
+    setNote("");
     const calls = [
       {
         to: token,
@@ -149,40 +181,27 @@ export default function PotPage() {
       });
     }
     try {
+      setAction("batch");
       await sendCalls({ calls });
-      setBatchNote(`Batched. Recipients get ${formatUsdc(units)}. Fee on top ${formatUsdc(quote.fee)}.`);
+      setNote("Approved and funded.");
       pot.refetch();
+      walletUsdc.refetch();
     } catch {
-      setBatchNote("This wallet will not batch. Approve, then fund.");
+      setAction("approve");
+      setNote("Confirm the approval. The fund comes next.");
+      writeContract({
+        address: token,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [contract, units],
+      });
     }
   }
 
-  function approveOnly() {
-    if (!contract || !token) return;
-    writeContract({
-      address: token,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [contract, parseUsdc(amount)],
-    });
-  }
-
-  function deposit() {
-    if (!contract) return;
-    writeContract({
-      address: contract,
-      abi: ipinAbi,
-      functionName: "fund",
-      args: [id, parseUsdc(amount)],
-    });
-  }
-
   return (
-    <main className="mx-auto max-w-3xl px-5 pb-24 pt-10">
-      <p className="text-sm text-laterite">
-        Pot {params.id} · round {String(round)} · {symbol}
-      </p>
-      <h1 className="mt-2 font-display text-4xl sm:text-5xl">{name || "…"}</h1>
+    <main className="mx-auto max-w-3xl px-5 pb-24 pt-8">
+      <p className="text-sm text-laterite">Distribution {params.id} · round {String(round)} · {symbol}</p>
+      <h1 className="mt-2 text-4xl font-bold">{name || "Distribution"}</h1>
       <p className="mt-2 text-mute">
         Owner{" "}
         {owner && (
@@ -192,11 +211,15 @@ export default function PotPage() {
         )}
       </p>
 
-      <div className="mt-8 rounded-3xl border border-ink/10 bg-panel p-6">
-        <p className="text-sm text-mute">In the pot</p>
-        <p className="font-display text-5xl tabular-nums">
-          {formatUsdc(balance as bigint)} {symbol}
-        </p>
+      <div className="mt-8 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-3xl border border-ink/10 bg-panel p-6">
+          <p className="text-sm text-mute">In the distribution</p>
+          <p className="mt-2 text-4xl font-bold tabular-nums">{formatUsdc(balance)} {symbol}</p>
+        </div>
+        <div className="rounded-3xl border border-ink/10 bg-panel p-6">
+          <p className="text-sm text-mute">Your USDC on Arc</p>
+          <p className="mt-2 text-4xl font-bold tabular-nums">{isConnected ? formatUsdc(walletBalance) : "-"} USDC</p>
+        </div>
       </div>
 
       <section className="mt-8 space-y-3">
@@ -210,66 +233,35 @@ export default function PotPage() {
                 <a className="font-mono text-sm hover:text-laterite" href={explorerAddress(m)} target="_blank" rel="noreferrer">
                   {shortAddr(m)}
                 </a>
-                {done ? <span className="stamp text-sm font-semibold">paid</span> : <span className="text-sm text-mute">unpaid</span>}
+                {done ? <span className="text-sm font-semibold text-laterite">Paid</span> : <span className="text-sm text-mute">Unpaid</span>}
               </div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-ground">
                 <div className="h-full bg-laterite" style={{ width: `${pct}%` }} />
               </div>
-              <div className="mt-2 flex items-center justify-between text-sm text-mute">
-                <span>
-                  {pct}% · {String(sh)} shares
-                </span>
-                {isOwner && !done && (
-                  <button
-                    type="button"
-                    className="btn-ghost h-11 px-4 text-sm"
-                    disabled={busy}
-                    onClick={() =>
-                      contract &&
-                      writeContract({
-                        address: contract,
-                        abi: ipinAbi,
-                        functionName: "pay",
-                        // mark
-                        args: [id, m],
-                      })
-                    }
-                  >
-                    Pay this share
-                  </button>
-                )}
-              </div>
+              <p className="mt-2 text-sm text-mute">{pct}%</p>
             </div>
           );
         })}
       </section>
 
       <section className="mt-8 rounded-3xl border border-ink/10 bg-panel p-6">
-        <h2 className="font-display text-2xl">Fund this distribution</h2>
-        <p className="mt-1 text-sm text-mute">Recipients get the amount. IPIN fee is a separate transfer to the fee wallet. One popup if the wallet batches.</p>
+        <h2 className="text-2xl font-bold">Fund</h2>
+        <p className="mt-1 text-sm text-mute">This approves the contract, then moves the USDC in. Pay stays off until that lands.</p>
         <input
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           className="mt-4 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite"
         />
         {isConnected ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <button type="button" className="btn-primary w-full sm:col-span-3" disabled={busy || !contract} onClick={fundOnce}>
-              Approve and fund
-            </button>
-            <button type="button" className="btn-ghost w-full" disabled={busy || !contract} onClick={approveOnly}>
-              Approve only
-            </button>
-            <button type="button" className="btn-ghost w-full sm:col-span-2" disabled={busy || !contract} onClick={deposit}>
-              Fund
-            </button>
-          </div>
+          <button type="button" className="btn-primary mt-4 w-full" disabled={busy || !contract} onClick={fundOnce}>
+            {busy ? "Confirm in the wallet" : "Approve and fund"}
+          </button>
         ) : (
           <ConnectButton className="mt-4 w-full" />
         )}
-        {batchNote && <p className="mt-3 text-sm text-mute">{batchNote}</p>}
+        {note && <p className="mt-3 text-sm text-mute">{note}</p>}
         <Link href={`/bridge?pot=${params.id}`} className="mt-4 inline-block text-sm text-laterite">
-          I have USDC on Base or Ethereum → bring it to Arc
+          USDC is on another chain
         </Link>
       </section>
 
@@ -277,19 +269,18 @@ export default function PotPage() {
         <button
           type="button"
           className="btn-primary mt-6 w-full"
-          disabled={busy || !contract}
+          disabled={busy || !contract || !canPay}
           onClick={() => {
             setAction("pay");
-            contract &&
-              writeContract({
-                address: contract,
-                abi: ipinAbi,
-                functionName: "payAll",
-                args: [id],
-              });
+            contract && writeContract({
+              address: contract,
+              abi: ipinAbi,
+              functionName: "payAll",
+              args: [id],
+            });
           }}
         >
-          Pay everyone
+          {canPay ? "Pay everyone" : "Pay everyone after it is funded"}
         </button>
       )}
 
