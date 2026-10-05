@@ -3,20 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { encodeFunctionData, isAddress, type Address, type Hex } from "viem";
+import { encodeFunctionData, type Address } from "viem";
 import { useAccount, useSendCalls, useSwitchChain, useWriteContract } from "wagmi";
 import { ConnectButton } from "@/components/ConnectButton";
 import { erc20Abi } from "@/lib/abi";
-import { arcTestnet, baseSepolia, sepolia } from "@/lib/chain";
+import { baseSepolia, sepolia } from "@/lib/chain";
 import {
-  CCTP_DOMAIN_BASE_SEPOLIA,
-  CCTP_DOMAIN_SEPOLIA,
-  MESSAGE_TRANSMITTER,
   TOKEN_MESSENGER,
   USDC_BASE_SEPOLIA,
   USDC_SEPOLIA,
-  fetchAttestation,
-  messageTransmitterAbi,
   tokenMessengerAbi,
   toBytes32Address,
 } from "@/lib/cctp";
@@ -44,7 +39,6 @@ export default function BridgePage() {
     const mintTo = address as Address;
     const sourceChain = source === "base" ? baseSepolia : sepolia;
     const burnToken = source === "base" ? USDC_BASE_SEPOLIA : USDC_SEPOLIA;
-    const sourceDomain = source === "base" ? CCTP_DOMAIN_BASE_SEPOLIA : CCTP_DOMAIN_SEPOLIA;
     const units = parseUsdc(amount);
     setNote("Confirm the sell in the wallet.");
     try {
@@ -66,7 +60,7 @@ export default function BridgePage() {
           },
         ],
       });
-      setNote("Sold. USDC lands on Arc after Circle attests. If it does not show, the wallet did not send the transaction.");
+      setNote("Sold. USDC lands on Arc after Circle attests.");
     } catch {
       setNote("The wallet needs the approval first.");
       writeContract({
@@ -77,8 +71,6 @@ export default function BridgePage() {
         args: [TOKEN_MESSENGER, units],
       });
     }
-    void sourceDomain;
-    void isAddress;
   }
 
   return (
