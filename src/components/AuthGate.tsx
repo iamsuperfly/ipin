@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
+import { CircleWallet } from "@/components/CircleWallet";
 import { supabaseBrowser } from "@/lib/supabase";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
@@ -52,5 +53,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       </main>
     );
   }
-  return children;
+  return (
+    <>
+      {children}
+      <CircleWallet />
+    </>
+  );
 }
