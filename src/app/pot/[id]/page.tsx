@@ -19,6 +19,7 @@ import { nextFundStep } from "@/lib/fund";
 import { formatUsdc, parseUsdc, shortAddr } from "@/lib/format";
 import { supabaseBrowser } from "@/lib/supabase";
 import { USDC, tokenSymbol } from "@/lib/tokens";
+import { withdrawAbi } from "@/lib/withdraw";
 
 export default function PotPage() {
   const params = useParams<{ id: string }>();
@@ -89,8 +90,8 @@ export default function PotPage() {
       });
       return;
     }
-    if (action === "fund") {
-      setNote("Fund sent. The balance updates when Arc confirms.");
+    if (action === "fund" || action === "withdraw") {
+      setNote(action === "withdraw" ? "Withdraw sent." : "Fund sent. The balance updates when Arc confirms.");
       return;
     }
     if (action !== "pay") return;
@@ -238,7 +239,12 @@ export default function PotPage() {
         </button>
       )}
       {isOwner && (
-        <p className="mt-4 text-sm text-mute">Withdraw is in the new contract. It is not on the address this site is using yet.</p>
+        <button type="button" className="btn-ghost mt-3 w-full" disabled={busy || !contract || balance === 0n} onClick={() => {
+          setAction("withdraw");
+          contract && writeContract({ address: contract, abi: withdrawAbi, functionName: "withdraw", args: [id] });
+        }}>
+          Withdraw unpaid
+        </button>
       )}
       {hash && <a className="mt-4 inline-block font-mono text-sm text-laterite" href={explorerTx(hash)} target="_blank" rel="noreferrer">View transaction</a>}
       {error && <p className="mt-3 text-sm text-danger">{writeErrorText(error)}</p>}

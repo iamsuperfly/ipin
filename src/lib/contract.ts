@@ -1,6 +1,6 @@
 import { getAddress, isAddress, zeroAddress } from "viem";
 
-export const IPIN_TESTNET = "0x48377ba080A05b85E4966418C46db2C0890f9287" as const;
+export const IPIN_TESTNET = "0x6956dB4D60961F51E786a82dB1e5b3DE2608d222" as const;
 
 export function ipinAddress() {
   const raw = process.env.NEXT_PUBLIC_IPIN_ADDRESS || IPIN_TESTNET;
