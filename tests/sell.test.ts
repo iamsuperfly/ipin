@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { sellStep } from "../src/lib/sell";
 
-describe("sell is one action when a route exists", () => {
-  it("funds when the cash is already USDC on Arc", () => {
-    expect(sellStep("USDC", "arc")).toBe("fund");
+describe("sell routes", () => {
+  it("sells USDC from every wired Circle testnet", () => {
+    for (const chain of ["eth", "base", "arb", "op", "polygon", "avax"]) {
+      expect(sellStep("USDC", chain)).toBe("sell");
+    }
   });
-  it("sells USDC from a routed chain into Arc", () => {
-    expect(sellStep("USDC", "base")).toBe("sell");
-    expect(sellStep("USDC", "eth")).toBe("sell");
-  });
-  it("stops when there is no route", () => {
+  it("does not sell a token with no route", () => {
     expect(sellStep("ETH", "base")).toBe("no-route");
+    expect(sellStep("USDC", "solana")).toBe("no-route");
   });
 });
