@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { encodeFunctionData, type Address } from "viem";
 import { useAccount, useSendCalls, useSwitchChain, useWriteContract } from "wagmi";
 import { ConnectButton } from "@/components/ConnectButton";
+import { SlideSell } from "@/components/SlideSell";
 import { erc20Abi } from "@/lib/abi";
 import { baseSepolia, sepolia } from "@/lib/chain";
 import {
@@ -30,6 +31,7 @@ export default function BridgePage() {
   const { writeContract, isPending, error } = useWriteContract();
   const { sendCalls, isPending: batching, error: batchError } = useSendCalls();
   const step = sellStep("USDC", source);
+  const busy = isPending || batching;
 
   async function sell() {
     if (!address || step !== "sell") {
@@ -76,7 +78,7 @@ export default function BridgePage() {
   return (
     <main className="mx-auto max-w-2xl px-5 pb-24 pt-10">
       <h1 className="font-display text-4xl sm:text-5xl">Sell</h1>
-      <p className="mt-3 text-mute">One slide. USDC on Base or Ethereum becomes the USDC balance on Arc.</p>
+      <p className="mt-3 text-mute">Slide on your phone. Click on a desktop. USDC on Base or Ethereum becomes USDC on Arc.</p>
       <div className="mt-8 space-y-4 rounded-3xl border border-ink/10 bg-panel p-6">
         <div className="grid grid-cols-2 gap-3">
           <button type="button" className={`h-12 rounded-2xl border ${source === "base" ? "border-laterite" : "border-ink/15"}`} onClick={() => setSource("base")}>Base</button>
@@ -84,7 +86,10 @@ export default function BridgePage() {
         </div>
         <input value={amount} onChange={(e) => setAmount(e.target.value)} className="h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite" />
         {isConnected ? (
-          <button type="button" className="btn-primary w-full" disabled={isPending || batching} onClick={sell}>Sell</button>
+          <>
+            <SlideSell disabled={busy} onSell={sell} />
+            <button type="button" className="btn-primary hidden w-full md:inline-flex" disabled={busy} onClick={sell}>Sell</button>
+          </>
         ) : (
           <ConnectButton className="w-full" />
         )}
