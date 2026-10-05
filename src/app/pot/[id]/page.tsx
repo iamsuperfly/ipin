@@ -14,6 +14,7 @@ import { erc20Abi, ipinAbi } from "@/lib/abi";
 import { explorerAddress, explorerTx } from "@/lib/chain";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
+import { quoteFee } from "@/lib/fee";
 import { nextFundStep } from "@/lib/fund";
 import { formatUsdc, parseUsdc, shortAddr } from "@/lib/format";
 import { supabaseBrowser } from "@/lib/supabase";
@@ -24,7 +25,8 @@ export default function PotPage() {
   const id = BigInt(params.id || "0");
   const contract = ipinAddress();
   const { address, isConnected } = useAccount();
-  const [amount, setAmount] = useState("5");
+  const [amount, setAmount] = useState("");
+  const [locked, setLocked] = useState(false);
   const [note, setNote] = useState("");
   const [action, setAction] = useState("");
 
@@ -59,6 +61,16 @@ export default function PotPage() {
 
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: waiting, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  useEffect(() => {
+    const sb = supabaseBrowser();
+    if (!sb) return;
+    sb.from("campaigns").select("pool_amount").eq("pot_id", Number(id)).maybeSingle().then(({ data }) => {
+      if (data?.pool_amount == null) return;
+      setAmount(String(data.pool_amount));
+      setLocked(true);
+    });
+  }, [id]);
 
   useEffect(() => {
     if (!isSuccess || !hash || !contract) return;
@@ -130,13 +142,14 @@ export default function PotPage() {
   const members = roster.data?.[0] ?? [];
   const shares = roster.data?.[1] ?? [];
   const paidFlags = roster.data?.[2] ?? [];
+  const units = parseUsdc(amount || "0");
+  const fee = quoteFee(0n, units).fee;
 
   function fundOnce() {
     if (!contract || !token) return;
-    const units = parseUsdc(amount);
-    const step = nextFundStep(walletBalance, units, (allowance.data ?? 0n) as bigint);
+    const step = nextFundStep(walletBalance, units + fee, (allowance.data ?? 0n) as bigint);
     if (step === "amount") {
-      setNote("Enter an amount first.");
+      setNote("This distribution has no amount yet.");
       return;
     }
     if (step === "short") {
@@ -150,7 +163,7 @@ export default function PotPage() {
         address: token,
         abi: erc20Abi,
         functionName: "approve",
-        args: [contract, units],
+        args: [contract, units + fee],
       });
       return;
     }
@@ -205,15 +218,16 @@ export default function PotPage() {
       </section>
       <section className="mt-8 rounded-3xl border border-ink/10 bg-panel p-6">
         <h2 className="text-2xl font-bold">Fund</h2>
-        <p className="mt-1 text-sm text-mute">Rabby needs two confirms. First the approval, then the fund. Pay stays off until Arc shows a balance.</p>
-        <input value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-4 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite" />
+        <p className="mt-1 text-sm text-mute">The amount is the one set at create. Two confirms: approval, then fund.</p>
+        <input value={amount} readOnly={locked} onChange={(e) => setAmount(e.target.value)} className="mt-4 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite" />
+        {fee > 0n && <p className="mt-2 text-sm text-mute">Fee on top {formatUsdc(fee)} USDC. Recipients still get the full amount.</p>}
         {isConnected ? (
           <button type="button" className="btn-primary mt-4 w-full" disabled={busy || !contract} onClick={fundOnce}>
             {busy ? "Confirm in the wallet" : "Approve and fund"}
           </button>
         ) : <ConnectButton className="mt-4 w-full" />}
         {note && <p className="mt-3 text-sm text-mute">{note}</p>}
-        <Link href={`/bridge?pot=${params.id}`} className="mt-4 inline-block text-sm text-laterite">USDC is on another chain</Link>
+        <Link href={`/bridge?pot=${params.id}`} className="mt-4 inline-block text-sm text-laterite">Sell into USDC</Link>
       </section>
       {isOwner && (
         <button type="button" className="btn-primary mt-6 w-full" disabled={busy || !contract || !canPay} onClick={() => {
@@ -222,6 +236,9 @@ export default function PotPage() {
         }}>
           {canPay ? "Pay everyone" : "Pay everyone after it is funded"}
         </button>
+      )}
+      {isOwner && (
+        <p className="mt-4 text-sm text-mute">Withdraw is in the new contract. It is not on the address this site is using yet.</p>
       )}
       {hash && <a className="mt-4 inline-block font-mono text-sm text-laterite" href={explorerTx(hash)} target="_blank" rel="noreferrer">View transaction</a>}
       {error && <p className="mt-3 text-sm text-danger">{writeErrorText(error)}</p>}
