@@ -8,16 +8,10 @@ import { useAccount, useSendCalls, useSwitchChain, useWriteContract } from "wagm
 import { ConnectButton } from "@/components/ConnectButton";
 import { SlideSell } from "@/components/SlideSell";
 import { erc20Abi } from "@/lib/abi";
-import { baseSepolia, sepolia } from "@/lib/chain";
-import {
-  TOKEN_MESSENGER,
-  USDC_BASE_SEPOLIA,
-  USDC_SEPOLIA,
-  tokenMessengerAbi,
-  toBytes32Address,
-} from "@/lib/cctp";
+import { TOKEN_MESSENGER, tokenMessengerAbi, toBytes32Address } from "@/lib/cctp";
 import { writeErrorText } from "@/lib/errors";
 import { parseUsdc } from "@/lib/format";
+import { SELL_ROUTES, type SellRouteId } from "@/lib/routes";
 import { sellStep } from "@/lib/sell";
 
 export default function BridgePage() {
@@ -25,31 +19,29 @@ export default function BridgePage() {
   const pot = search.get("pot") ?? "";
   const { address, isConnected } = useAccount();
   const { switchChain } = useSwitchChain();
-  const [source, setSource] = useState<"base" | "eth">("base");
+  const [source, setSource] = useState<SellRouteId>("base");
   const [amount, setAmount] = useState("1");
-  const [note, setNote] = useState("Sell turns USDC on Base or Ethereum into USDC on Arc.");
+  const [note, setNote] = useState("Sell turns USDC on a Circle route into USDC on Arc.");
   const { writeContract, isPending, error } = useWriteContract();
   const { sendCalls, isPending: batching, error: batchError } = useSendCalls();
-  const step = sellStep("USDC", source);
+  const route = SELL_ROUTES.find((item) => item.id === source) ?? SELL_ROUTES[1];
   const busy = isPending || batching;
 
   async function sell() {
-    if (!address || step !== "sell") {
+    if (!address || sellStep("USDC", route.id) !== "sell") {
       setNote("This token has no route into Arc.");
       return;
     }
     const mintTo = address as Address;
-    const sourceChain = source === "base" ? baseSepolia : sepolia;
-    const burnToken = source === "base" ? USDC_BASE_SEPOLIA : USDC_SEPOLIA;
     const units = parseUsdc(amount);
     setNote("Confirm the sell in the wallet.");
     try {
-      await switchChain({ chainId: sourceChain.id });
+      await switchChain({ chainId: route.chain.id });
       await sendCalls({
-        chainId: sourceChain.id,
+        chainId: route.chain.id,
         calls: [
           {
-            to: burnToken,
+            to: route.usdc,
             data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [TOKEN_MESSENGER, units] }),
           },
           {
@@ -57,7 +49,7 @@ export default function BridgePage() {
             data: encodeFunctionData({
               abi: tokenMessengerAbi,
               functionName: "depositForBurn",
-              args: [units, 26, toBytes32Address(mintTo), burnToken, toBytes32Address("0x0000000000000000000000000000000000000000"), 0n, 2000],
+              args: [units, 26, toBytes32Address(mintTo), route.usdc, toBytes32Address("0x0000000000000000000000000000000000000000"), 0n, 2000],
             }),
           },
         ],
@@ -66,8 +58,8 @@ export default function BridgePage() {
     } catch {
       setNote("The wallet needs the approval first.");
       writeContract({
-        chainId: sourceChain.id,
-        address: burnToken,
+        chainId: route.chain.id,
+        address: route.usdc,
         abi: erc20Abi,
         functionName: "approve",
         args: [TOKEN_MESSENGER, units],
@@ -78,11 +70,14 @@ export default function BridgePage() {
   return (
     <main className="mx-auto max-w-2xl px-5 pb-24 pt-10">
       <h1 className="font-display text-4xl sm:text-5xl">Sell</h1>
-      <p className="mt-3 text-mute">Slide on your phone. Click on a desktop. USDC on Base or Ethereum becomes USDC on Arc.</p>
+      <p className="mt-3 text-mute">Slide on your phone. Click on a desktop. USDC on a Circle route becomes USDC on Arc.</p>
       <div className="mt-8 space-y-4 rounded-3xl border border-ink/10 bg-panel p-6">
-        <div className="grid grid-cols-2 gap-3">
-          <button type="button" className={`h-12 rounded-2xl border ${source === "base" ? "border-laterite" : "border-ink/15"}`} onClick={() => setSource("base")}>Base</button>
-          <button type="button" className={`h-12 rounded-2xl border ${source === "eth" ? "border-laterite" : "border-ink/15"}`} onClick={() => setSource("eth")}>Ethereum</button>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {SELL_ROUTES.map((item) => (
+            <button key={item.id} type="button" className={`h-12 rounded-2xl border ${source === item.id ? "border-laterite" : "border-ink/15"}`} onClick={() => setSource(item.id)}>
+              {item.name}
+            </button>
+          ))}
         </div>
         <input value={amount} onChange={(e) => setAmount(e.target.value)} className="h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite" />
         {isConnected ? (
