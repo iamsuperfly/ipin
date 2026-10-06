@@ -4,7 +4,7 @@ export function circleKey(env: Record<string, string | undefined>) {
   return env.CIRCLE_API_KEY || env.TEST_API_KEY || "";
 }
 
-export function circleHost() {
+export function circleHost(_key: string) {
   return "https://api.circle.com";
 }
 
