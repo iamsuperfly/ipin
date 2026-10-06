@@ -15,3 +15,9 @@ export function socialTokenBody(deviceId: string, idempotencyKey: string) {
 export function circleReady(apiKey?: string, appId?: string) {
   return Boolean(apiKey && appId);
 }
+
+export function circleFailure(status: number) {
+  if (status === 401) return "Circle did not accept the key. Check the test key on this deploy.";
+  if (status === 400) return "Circle did not accept this browser. Try again.";
+  return "Couldn't reach Circle. Try again.";
+}

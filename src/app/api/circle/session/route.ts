@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CIRCLE_APP_ID, circleHost, circleKey, circleReady, socialTokenBody } from "@/lib/circle";
+import { CIRCLE_APP_ID, circleFailure, circleHost, circleKey, circleReady, socialTokenBody } from "@/lib/circle";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,10 @@ export async function POST(request: Request) {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    return NextResponse.json({ error: "Couldn't start the wallet. Try again." }, { status: 502 });
+    return NextResponse.json({ error: circleFailure(res.status) }, { status: 502 });
   }
-  return NextResponse.json({ appId, deviceToken: json.data?.deviceToken, deviceEncryptionKey: json.data?.deviceEncryptionKey });
+  if (!json.data?.deviceToken) {
+    return NextResponse.json({ error: "Circle did not return a session. Try again." }, { status: 502 });
+  }
+  return NextResponse.json({ appId, deviceToken: json.data.deviceToken, deviceEncryptionKey: json.data.deviceEncryptionKey });
 }

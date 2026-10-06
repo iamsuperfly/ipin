@@ -14,14 +14,15 @@ export function CircleWallet() {
   async function start() {
     setBusy(true);
     setNote("Starting the Arc wallet.");
+    const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
+    let sdk: W3SSdk;
     try {
-      const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
-      const sdk = new W3SSdk(
+      sdk = new W3SSdk(
         {
           appSettings: { appId },
           loginConfigs: {
-            deviceToken: "",
-            deviceEncryptionKey: "",
+            deviceToken: window.localStorage.getItem("ipin-circle-token") || "",
+            deviceEncryptionKey: window.localStorage.getItem("ipin-circle-key") || "",
             google: { clientId: GOOGLE_CLIENT_ID, redirectUri: window.location.origin },
           },
         },
@@ -72,34 +73,52 @@ export function CircleWallet() {
           });
         },
       );
-      const deviceId = await sdk.getDeviceId();
-      const session = await fetch("/api/circle/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, idempotencyKey: crypto.randomUUID() }),
-      });
-      const sessionJson = await session.json().catch(() => ({}));
-      if (!session.ok) {
-        setNote(sessionJson.error || "Couldn't start the wallet. Try again.");
-        setBusy(false);
-        return;
-      }
-      const deviceToken = sessionJson.deviceToken || "";
-      const deviceEncryptionKey = sessionJson.deviceEncryptionKey || "";
-      window.localStorage.setItem("ipin-circle-token", deviceToken);
-      window.localStorage.setItem("ipin-circle-key", deviceEncryptionKey);
-      sdk.updateConfigs({
-        appSettings: { appId },
-        loginConfigs: {
-          deviceToken,
-          deviceEncryptionKey,
-          google: { clientId: GOOGLE_CLIENT_ID, redirectUri: window.location.origin },
-        },
-      });
+    } catch {
+      setNote("This browser blocked the wallet start. Allow popups and try again.");
+      setBusy(false);
+      return;
+    }
+    let deviceId = "";
+    try {
+      deviceId = await sdk.getDeviceId();
+    } catch {
+      setNote("This browser blocked the wallet start. Allow popups and try again.");
+      setBusy(false);
+      return;
+    }
+    const session = await fetch("/api/circle/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, idempotencyKey: crypto.randomUUID() }),
+    }).catch(() => null);
+    if (!session) {
+      setNote("Couldn't reach Circle. Try again.");
+      setBusy(false);
+      return;
+    }
+    const sessionJson = await session.json().catch(() => ({}));
+    if (!session.ok) {
+      setNote(sessionJson.error || "Couldn't reach Circle. Try again.");
+      setBusy(false);
+      return;
+    }
+    const deviceToken = sessionJson.deviceToken || "";
+    const deviceEncryptionKey = sessionJson.deviceEncryptionKey || "";
+    window.localStorage.setItem("ipin-circle-token", deviceToken);
+    window.localStorage.setItem("ipin-circle-key", deviceEncryptionKey);
+    sdk.updateConfigs({
+      appSettings: { appId },
+      loginConfigs: {
+        deviceToken,
+        deviceEncryptionKey,
+        google: { clientId: GOOGLE_CLIENT_ID, redirectUri: window.location.origin },
+      },
+    });
+    try {
       await sdk.performLogin("Google" as Parameters<W3SSdk["performLogin"]>[0]);
       setNote("Confirm Google to create the Arc wallet.");
     } catch {
-      setNote("Couldn't start the wallet. Try again.");
+      setNote("Couldn't open Google. Try again.");
       setBusy(false);
     }
   }
