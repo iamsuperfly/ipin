@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CIRCLE_APP_ID } from "@/lib/circle";
-import { SocialLoginProvider, W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
+import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
 
 const GOOGLE_CLIENT_ID = "12931803157-318qbgo8ijiqionm6hd22ofm4qvsl41l.apps.googleusercontent.com";
 
@@ -84,7 +84,7 @@ export function CircleWallet() {
       }
       window.localStorage.setItem("ipin-circle-token", sessionJson.deviceToken || "");
       window.localStorage.setItem("ipin-circle-key", sessionJson.deviceEncryptionKey || "");
-      await sdk.performLogin(SocialLoginProvider.GOOGLE);
+      await sdk.performLogin("Google" as Parameters<W3SSdk["performLogin"]>[0]);
       setNote("Confirm Google to create the Arc wallet.");
     } catch {
       setNote("Couldn't start the wallet. Try again.");
