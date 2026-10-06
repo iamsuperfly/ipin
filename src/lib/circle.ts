@@ -5,7 +5,7 @@ export function circleKey(env: Record<string, string | undefined>) {
 }
 
 export function circleHost(key: string) {
-  return "https://api.circle.com";
+  return key.startsWith("LIVE_API_KEY") ? "https://api.circle.com" : "https://api.circle.com";
 }
 
 export function socialTokenBody(deviceId: string, idempotencyKey: string) {
