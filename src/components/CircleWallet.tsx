@@ -1,15 +1,91 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CIRCLE_APP_ID } from "@/lib/circle";
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
 
 const GOOGLE_CLIENT_ID = "12931803157-318qbgo8ijiqionm6hd22ofm4qvsl41l.apps.googleusercontent.com";
 
+function returnUrl() {
+  return `${window.location.origin}/account`;
+}
+
 export function CircleWallet() {
   const [note, setNote] = useState("An Arc wallet is separate from the connected wallet.");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (window.localStorage.getItem("ipin-circle-pending") !== "1") return;
+    const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
+    const deviceToken = window.localStorage.getItem("ipin-circle-token") || "";
+    const deviceEncryptionKey = window.localStorage.getItem("ipin-circle-key") || "";
+    setBusy(true);
+    setNote("Finishing the Arc wallet.");
+    const sdk = new W3SSdk(
+      {
+        appSettings: { appId },
+        loginConfigs: {
+          deviceToken,
+          deviceEncryptionKey,
+          google: { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl() },
+        },
+      },
+      (error, result) => {
+        void finish(sdk, error, result);
+      },
+    );
+
+    async function finish(current: W3SSdk, error: unknown, result: { userToken?: string; encryptionKey?: string } | undefined) {
+      if (error || !result?.userToken || !result.encryptionKey) {
+        window.localStorage.removeItem("ipin-circle-pending");
+        setNote("Couldn't finish the Google prompt. Try again.");
+        setBusy(false);
+        return;
+      }
+      const created = await fetch("/api/circle/wallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userToken: result.userToken, encryptionKey: result.encryptionKey }),
+      });
+      const json = await created.json().catch(() => ({}));
+      if (!created.ok) {
+        setNote(json.error || "Couldn't create the Arc wallet. Try again.");
+        setBusy(false);
+        return;
+      }
+      if (json.address) {
+        window.localStorage.removeItem("ipin-circle-pending");
+        setAddress(json.address);
+        setNote("Arc wallet ready.");
+        setBusy(false);
+        return;
+      }
+      if (!json.challengeId) {
+        setNote("Couldn't create the Arc wallet. Try again.");
+        setBusy(false);
+        return;
+      }
+      current.setAuthentication({ userToken: result.userToken, encryptionKey: result.encryptionKey });
+      current.execute(json.challengeId, async (challengeError) => {
+        if (challengeError) {
+          setNote("Couldn't create the Arc wallet. Try again.");
+          setBusy(false);
+          return;
+        }
+        const listed = await fetch("/api/circle/wallet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userToken: result.userToken, encryptionKey: result.encryptionKey }),
+        });
+        const listedJson = await listed.json().catch(() => ({}));
+        window.localStorage.removeItem("ipin-circle-pending");
+        setAddress(listedJson.address || "");
+        setNote(listedJson.address ? "Arc wallet ready." : "Wallet created. Refresh if the address is not here yet.");
+        setBusy(false);
+      });
+    }
+  }, []);
 
   async function start() {
     setBusy(true);
@@ -17,62 +93,14 @@ export function CircleWallet() {
     const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
     let sdk: W3SSdk;
     try {
-      sdk = new W3SSdk(
-        {
-          appSettings: { appId },
-          loginConfigs: {
-            deviceToken: window.localStorage.getItem("ipin-circle-token") || "",
-            deviceEncryptionKey: window.localStorage.getItem("ipin-circle-key") || "",
-            google: { clientId: GOOGLE_CLIENT_ID, redirectUri: window.location.origin },
-          },
+      sdk = new W3SSdk({
+        appSettings: { appId },
+        loginConfigs: {
+          deviceToken: window.localStorage.getItem("ipin-circle-token") || "",
+          deviceEncryptionKey: window.localStorage.getItem("ipin-circle-key") || "",
+          google: { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl() },
         },
-        async (error, result) => {
-          if (error || !result || !("userToken" in result)) {
-            setNote("Couldn't finish the Google prompt. Try again.");
-            setBusy(false);
-            return;
-          }
-          const created = await fetch("/api/circle/wallet", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userToken: result.userToken, encryptionKey: result.encryptionKey }),
-          });
-          const json = await created.json().catch(() => ({}));
-          if (!created.ok) {
-            setNote(json.error || "Couldn't create the Arc wallet. Try again.");
-            setBusy(false);
-            return;
-          }
-          if (json.address) {
-            setAddress(json.address);
-            setNote("Arc wallet ready.");
-            setBusy(false);
-            return;
-          }
-          if (!json.challengeId) {
-            setNote("Couldn't create the Arc wallet. Try again.");
-            setBusy(false);
-            return;
-          }
-          sdk.setAuthentication({ userToken: result.userToken, encryptionKey: result.encryptionKey });
-          sdk.execute(json.challengeId, async (challengeError) => {
-            if (challengeError) {
-              setNote("Couldn't create the Arc wallet. Try again.");
-              setBusy(false);
-              return;
-            }
-            const listed = await fetch("/api/circle/wallet", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userToken: result.userToken, encryptionKey: result.encryptionKey }),
-            });
-            const listedJson = await listed.json().catch(() => ({}));
-            setAddress(listedJson.address || "");
-            setNote(listedJson.address ? "Arc wallet ready." : "Wallet created. Refresh if the address is not here yet.");
-            setBusy(false);
-          });
-        },
-      );
+      });
     } catch {
       setNote("This browser blocked the wallet start. Allow popups and try again.");
       setBusy(false);
@@ -102,22 +130,22 @@ export function CircleWallet() {
       setBusy(false);
       return;
     }
-    const deviceToken = sessionJson.deviceToken || "";
-    const deviceEncryptionKey = sessionJson.deviceEncryptionKey || "";
-    window.localStorage.setItem("ipin-circle-token", deviceToken);
-    window.localStorage.setItem("ipin-circle-key", deviceEncryptionKey);
+    window.localStorage.setItem("ipin-circle-token", sessionJson.deviceToken || "");
+    window.localStorage.setItem("ipin-circle-key", sessionJson.deviceEncryptionKey || "");
+    window.localStorage.setItem("ipin-circle-pending", "1");
     sdk.updateConfigs({
       appSettings: { appId },
       loginConfigs: {
-        deviceToken,
-        deviceEncryptionKey,
-        google: { clientId: GOOGLE_CLIENT_ID, redirectUri: window.location.origin },
+        deviceToken: sessionJson.deviceToken || "",
+        deviceEncryptionKey: sessionJson.deviceEncryptionKey || "",
+        google: { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl() },
       },
     });
     try {
       await sdk.performLogin("Google" as Parameters<W3SSdk["performLogin"]>[0]);
-      setNote("Confirm Google to create the Arc wallet.");
+      setNote("Confirm Google. You will come back to this page.");
     } catch {
+      window.localStorage.removeItem("ipin-circle-pending");
       setNote("Couldn't open Google. Try again.");
       setBusy(false);
     }
