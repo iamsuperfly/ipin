@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { Avatar } from "@/components/Avatar";
+import { CircleWallet } from "@/components/CircleWallet";
 import { supabaseBrowser } from "@/lib/supabase";
 import { shortAddr } from "@/lib/format";
 
@@ -124,7 +125,6 @@ export default function AccountPage() {
         </div>
       </div>
       <button type="button" className="btn-ghost mt-4 h-11 w-full text-sm" onClick={() => setEditing((v) => !v)}>{editing ? "Close" : "Edit"}</button>
-
       {editing && (
         <div className="mt-4 space-y-4 rounded-3xl border border-ink/10 bg-panel p-6">
           <label className="block text-sm text-mute">Picture
@@ -136,36 +136,18 @@ export default function AccountPage() {
           <button type="button" className="btn-primary w-full" onClick={saveName}>Save</button>
         </div>
       )}
-
       <section className="mt-8 grid grid-cols-3 gap-3">
-        <article className="rounded-2xl border border-ink/10 bg-panel p-4">
-          <p className="text-sm text-mute">Sent</p>
-          <p className="mt-2 text-2xl font-bold tabular-nums">{sent}</p>
-        </article>
-        <article className="rounded-2xl border border-ink/10 bg-panel p-4">
-          <p className="text-sm text-mute">People</p>
-          <p className="mt-2 text-2xl font-bold tabular-nums">{people}</p>
-        </article>
-        <article className="rounded-2xl border border-ink/10 bg-panel p-4">
-          <p className="text-sm text-mute">Waiting</p>
-          <p className="mt-2 text-2xl font-bold tabular-nums">{waitingTotal}</p>
-        </article>
+        <article className="rounded-2xl border border-ink/10 bg-panel p-4"><p className="text-sm text-mute">Sent</p><p className="mt-2 text-2xl font-bold tabular-nums">{sent}</p></article>
+        <article className="rounded-2xl border border-ink/10 bg-panel p-4"><p className="text-sm text-mute">People</p><p className="mt-2 text-2xl font-bold tabular-nums">{people}</p></article>
+        <article className="rounded-2xl border border-ink/10 bg-panel p-4"><p className="text-sm text-mute">Waiting</p><p className="mt-2 text-2xl font-bold tabular-nums">{waitingTotal}</p></article>
       </section>
-
       <section className="mt-8">
         <p className="text-sm text-mute">Waiting</p>
         <ul className="mt-3 space-y-3">
           {waiting.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">Nothing waiting.</li>}
           {waiting.map((r) => (
             <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
-              {r.pot_id ? (
-                <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
-              ) : (
-                <div>
-                  <div className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>
-                  <p className="mt-2 text-sm text-mute">Not on Arc yet. Create it again to fund and pay.</p>
-                </div>
-              )}
+              {r.pot_id ? <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link> : <div className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>}
               <button type="button" className="mt-3 text-sm text-danger" onClick={() => remove(r.id)}>Delete</button>
             </li>
           ))}
@@ -177,18 +159,14 @@ export default function AccountPage() {
           {done.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">None completed yet.</li>}
           {done.map((r) => (
             <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
-              {r.pot_id ? (
-                <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
-              ) : (
-                <div className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>
-              )}
+              {r.pot_id ? <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link> : <div className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>}
             </li>
           ))}
         </ul>
       </section>
-
       <section className="mt-8 space-y-3">
         <p className="text-sm text-mute">Wallets</p>
+        <CircleWallet />
         {isConnected ? (
           <button type="button" className="btn-ghost w-full" onClick={() => disconnect()}>Disconnect {shortAddr(address)}</button>
         ) : (
