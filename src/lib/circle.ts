@@ -4,8 +4,8 @@ export function circleKey(env: Record<string, string | undefined>) {
   return env.CIRCLE_API_KEY || env.TEST_API_KEY || "";
 }
 
-export function circleHost(_key: string) {
-  return "https://api.circle.com";
+export function circleHost(key: string) {
+  return key.startsWith("LIVE_API_KEY") ? "https://api.circle.com" : "https://api.circle.com";
 }
 
 export function socialTokenBody(deviceId: string, idempotencyKey: string) {

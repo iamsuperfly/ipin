@@ -20,6 +20,8 @@ export function CircleWallet() {
         {
           appSettings: { appId },
           loginConfigs: {
+            deviceToken: "",
+            deviceEncryptionKey: "",
             google: { clientId: GOOGLE_CLIENT_ID, redirectUri: window.location.origin },
           },
         },
@@ -82,8 +84,18 @@ export function CircleWallet() {
         setBusy(false);
         return;
       }
-      window.localStorage.setItem("ipin-circle-token", sessionJson.deviceToken || "");
-      window.localStorage.setItem("ipin-circle-key", sessionJson.deviceEncryptionKey || "");
+      const deviceToken = sessionJson.deviceToken || "";
+      const deviceEncryptionKey = sessionJson.deviceEncryptionKey || "";
+      window.localStorage.setItem("ipin-circle-token", deviceToken);
+      window.localStorage.setItem("ipin-circle-key", deviceEncryptionKey);
+      sdk.updateConfigs({
+        appSettings: { appId },
+        loginConfigs: {
+          deviceToken,
+          deviceEncryptionKey,
+          google: { clientId: GOOGLE_CLIENT_ID, redirectUri: window.location.origin },
+        },
+      });
       await sdk.performLogin("Google" as Parameters<W3SSdk["performLogin"]>[0]);
       setNote("Confirm Google to create the Arc wallet.");
     } catch {
