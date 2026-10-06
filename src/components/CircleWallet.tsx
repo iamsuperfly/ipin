@@ -1,9 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { CIRCLE_APP_ID } from "@/lib/circle";
-
-const GOOGLE_CLIENT_ID = "12931803157-318qbgo8ijiqionm6hd22ofm4qvsl41l.apps.googleusercontent.com";
 
 export function CircleWallet() {
   const [note, setNote] = useState("An Arc wallet is separate from the connected wallet.");
@@ -13,18 +10,10 @@ export function CircleWallet() {
     setBusy(true);
     setNote("Starting the Arc wallet.");
     try {
-      const sdkModule = await import("@circle-fin/w3s-pw-web-sdk");
-      const sdk = new sdkModule.W3SSdk({
-        appSettings: { appId: process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID },
-        loginConfigs: {
-          google: { clientId: GOOGLE_CLIENT_ID, redirectUri: window.location.origin },
-        },
-      });
-      const deviceId = await sdk.getDeviceId();
       const res = await fetch("/api/circle/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, idempotencyKey: crypto.randomUUID() }),
+        body: JSON.stringify({ deviceId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -32,8 +21,7 @@ export function CircleWallet() {
         return;
       }
       window.localStorage.setItem("ipin-circle-token", json.deviceToken || "");
-      window.localStorage.setItem("ipin-circle-key", json.deviceEncryptionKey || "");
-      setNote("Arc wallet session started. Circle still has to finish the sign-in prompt.");
+      setNote("Arc wallet session started.");
     } catch {
       setNote("Couldn't start the wallet. Try again.");
     } finally {
