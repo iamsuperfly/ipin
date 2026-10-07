@@ -29,6 +29,52 @@ export function CircleWallet() {
   const [busy, setBusy] = useState(false);
   const started = useRef(false);
 
+  async function openGoogle() {
+    const headers = await authHeaders();
+    if (!headers) {
+      setNote("Sign in before starting a wallet.");
+      setBusy(false);
+      return;
+    }
+    const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
+    const sdk = new W3SSdk({
+      appSettings: { appId },
+      loginConfigs: {
+        deviceToken: window.localStorage.getItem("ipin-circle-token") || "",
+        deviceEncryptionKey: window.localStorage.getItem("ipin-circle-key") || "",
+        google: googleConfig(),
+      },
+    });
+    const deviceId = window.localStorage.getItem("ipin-circle-device") || (await sdk.getDeviceId());
+    window.localStorage.setItem("ipin-circle-device", deviceId);
+    if (!window.localStorage.getItem("ipin-circle-token")) {
+      const session = await fetch("/api/circle/session", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ deviceId, idempotencyKey: crypto.randomUUID() }),
+      });
+      const sessionJson = await session.json().catch(() => ({}));
+      if (!session.ok) {
+        setNote(sessionJson.error || "Couldn't reach Circle. Try again.");
+        setBusy(false);
+        return;
+      }
+      window.localStorage.setItem("ipin-circle-token", sessionJson.deviceToken || "");
+      window.localStorage.setItem("ipin-circle-key", sessionJson.deviceEncryptionKey || "");
+      sdk.updateConfigs({
+        appSettings: { appId },
+        loginConfigs: {
+          deviceToken: sessionJson.deviceToken || "",
+          deviceEncryptionKey: sessionJson.deviceEncryptionKey || "",
+          google: googleConfig(),
+        },
+      });
+    }
+    window.localStorage.setItem("ipin-circle-pending", "1");
+    await sdk.performLogin("Google" as Parameters<W3SSdk["performLogin"]>[0]);
+    setNote("Choose the Google account. You will come back here.");
+  }
+
   useEffect(() => {
     if (started.current) return;
     const pending = window.localStorage.getItem("ipin-circle-pending") === "1";
@@ -39,9 +85,22 @@ export function CircleWallet() {
     }
     started.current = true;
     if (returned === "error") {
-      window.localStorage.removeItem("ipin-circle-pending");
-      setNote(circleErrorMessage(window.location.search, window.location.hash));
+      const reason = circleErrorMessage(window.location.search, window.location.hash);
       window.history.replaceState({}, "", "/account");
+      if (reason.includes("account picker") && window.localStorage.getItem("ipin-circle-retry") !== "1") {
+        window.localStorage.setItem("ipin-circle-retry", "1");
+        setBusy(true);
+        setNote("Opening the Google account picker.");
+        void openGoogle().catch(() => {
+          window.localStorage.removeItem("ipin-circle-pending");
+          setNote("Couldn't open Google. Try again.");
+          setBusy(false);
+        });
+        return;
+      }
+      window.localStorage.removeItem("ipin-circle-pending");
+      window.localStorage.removeItem("ipin-circle-retry");
+      setNote(reason);
       return;
     }
 
@@ -61,17 +120,12 @@ export function CircleWallet() {
     const sdk = new W3SSdk(
       {
         appSettings: { appId },
-        loginConfigs: {
-          deviceToken,
-          deviceEncryptionKey,
-          google: googleConfig(),
-        },
+        loginConfigs: { deviceToken, deviceEncryptionKey, google: googleConfig() },
       },
       (error, result) => {
         void finish(sdk, error, result);
       },
     );
-    void sdk.getDeviceId().catch(() => undefined);
 
     async function finish(current: W3SSdk, error: unknown, result: { userToken?: string; encryptionKey?: string } | undefined) {
       if (settled) return;
@@ -103,6 +157,7 @@ export function CircleWallet() {
       }
       if (json.address) {
         window.localStorage.removeItem("ipin-circle-pending");
+        window.localStorage.removeItem("ipin-circle-retry");
         setAddress(json.address);
         setNote("Arc wallet ready.");
         setBusy(false);
@@ -127,6 +182,7 @@ export function CircleWallet() {
         });
         const listedJson = await listed.json().catch(() => ({}));
         window.localStorage.removeItem("ipin-circle-pending");
+        window.localStorage.removeItem("ipin-circle-retry");
         setAddress(listedJson.address || "");
         setNote(listedJson.address ? "Arc wallet ready." : "Wallet created. Refresh if the address is not here yet.");
         setBusy(false);
@@ -138,78 +194,11 @@ export function CircleWallet() {
   async function start() {
     setBusy(true);
     setNote("Starting the Arc wallet.");
-    const headers = await authHeaders();
-    if (!headers) {
-      setNote("Sign in before starting a wallet.");
-      setBusy(false);
-      return;
-    }
-    const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
-    let sdk: W3SSdk;
+    window.localStorage.removeItem("ipin-circle-token");
+    window.localStorage.removeItem("ipin-circle-key");
+    window.localStorage.removeItem("ipin-circle-retry");
     try {
-      sdk = new W3SSdk(
-        {
-          appSettings: { appId },
-          loginConfigs: {
-            deviceToken: window.localStorage.getItem("ipin-circle-token") || "",
-            deviceEncryptionKey: window.localStorage.getItem("ipin-circle-key") || "",
-            google: googleConfig(),
-          },
-        },
-        (error, result) => {
-          if (error || !result || !("userToken" in result)) {
-            setNote("Couldn't finish the Google prompt. Try again.");
-            setBusy(false);
-            return;
-          }
-          window.localStorage.setItem("ipin-circle-user", result.userToken);
-          window.localStorage.setItem("ipin-circle-user-key", result.encryptionKey);
-          setNote("Google confirmed. Creating the Arc wallet.");
-        },
-      );
-    } catch {
-      setNote("This browser blocked the wallet start. Allow popups and try again.");
-      setBusy(false);
-      return;
-    }
-    let deviceId = "";
-    try {
-      deviceId = await sdk.getDeviceId();
-    } catch {
-      setNote("This browser blocked the wallet start. Allow popups and try again.");
-      setBusy(false);
-      return;
-    }
-    const session = await fetch("/api/circle/session", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ deviceId, idempotencyKey: crypto.randomUUID() }),
-    }).catch(() => null);
-    if (!session) {
-      setNote("Couldn't reach Circle. Try again.");
-      setBusy(false);
-      return;
-    }
-    const sessionJson = await session.json().catch(() => ({}));
-    if (!session.ok) {
-      setNote(sessionJson.error || "Couldn't reach Circle. Try again.");
-      setBusy(false);
-      return;
-    }
-    window.localStorage.setItem("ipin-circle-token", sessionJson.deviceToken || "");
-    window.localStorage.setItem("ipin-circle-key", sessionJson.deviceEncryptionKey || "");
-    window.localStorage.setItem("ipin-circle-pending", "1");
-    sdk.updateConfigs({
-      appSettings: { appId },
-      loginConfigs: {
-        deviceToken: sessionJson.deviceToken || "",
-        deviceEncryptionKey: sessionJson.deviceEncryptionKey || "",
-        google: googleConfig(),
-      },
-    });
-    try {
-      await sdk.performLogin("Google" as Parameters<W3SSdk["performLogin"]>[0]);
-      setNote("Confirm Google. You will come back to this page.");
+      await openGoogle();
     } catch {
       window.localStorage.removeItem("ipin-circle-pending");
       setNote("Couldn't open Google. Try again.");
