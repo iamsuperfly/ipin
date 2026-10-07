@@ -11,6 +11,10 @@ function returnUrl() {
   return `${window.location.origin}/account`;
 }
 
+function googleConfig() {
+  return { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl(), selectAccountPrompt: true };
+}
+
 export function CircleWallet() {
   const [note, setNote] = useState("An Arc wallet is separate from the connected wallet.");
   const [address, setAddress] = useState("");
@@ -52,7 +56,7 @@ export function CircleWallet() {
         loginConfigs: {
           deviceToken,
           deviceEncryptionKey,
-          google: { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl() },
+          google: googleConfig(),
         },
       },
       (error, result) => {
@@ -129,7 +133,7 @@ export function CircleWallet() {
           loginConfigs: {
             deviceToken: window.localStorage.getItem("ipin-circle-token") || "",
             deviceEncryptionKey: window.localStorage.getItem("ipin-circle-key") || "",
-            google: { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl() },
+            google: googleConfig(),
           },
         },
         (error, result) => {
@@ -180,7 +184,7 @@ export function CircleWallet() {
       loginConfigs: {
         deviceToken: sessionJson.deviceToken || "",
         deviceEncryptionKey: sessionJson.deviceEncryptionKey || "",
-        google: { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl() },
+        google: googleConfig(),
       },
     });
     try {
