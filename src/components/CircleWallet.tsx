@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CIRCLE_APP_ID } from "@/lib/circle";
-import { circleReturn } from "@/lib/circleReturn";
+import { circleErrorMessage, circleReturn } from "@/lib/circleReturn";
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
 
 const GOOGLE_CLIENT_ID = "12931803157-318qbgo8ijiqionm6hd22ofm4qvsl41l.apps.googleusercontent.com";
@@ -28,7 +28,7 @@ export function CircleWallet() {
     started.current = true;
     if (returned === "error") {
       window.localStorage.removeItem("ipin-circle-pending");
-      setNote("Google did not finish. Try again.");
+      setNote(circleErrorMessage(window.location.search, window.location.hash));
       window.history.replaceState({}, "", "/account");
       return;
     }
