@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CIRCLE_APP_ID } from "@/lib/circle";
+import { circleReturn } from "@/lib/circleReturn";
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
 
 const GOOGLE_CLIENT_ID = "12931803157-318qbgo8ijiqionm6hd22ofm4qvsl41l.apps.googleusercontent.com";
@@ -10,24 +11,25 @@ function returnUrl() {
   return `${window.location.origin}/account`;
 }
 
-function googleCameBack() {
-  const query = new URLSearchParams(window.location.search);
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  return ["code", "state", "error", "access_token"].some((key) => query.has(key) || hash.has(key));
-}
-
 export function CircleWallet() {
   const [note, setNote] = useState("An Arc wallet is separate from the connected wallet.");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
+  const started = useRef(false);
 
   useEffect(() => {
+    if (started.current) return;
     const pending = window.localStorage.getItem("ipin-circle-pending") === "1";
-    const returned = googleCameBack();
-    if (!pending && !returned) return;
-    if (!returned) {
+    const returned = circleReturn(window.location.search, window.location.hash);
+    if (!pending || !returned) {
+      if (pending) window.localStorage.removeItem("ipin-circle-pending");
+      return;
+    }
+    started.current = true;
+    if (returned === "error") {
       window.localStorage.removeItem("ipin-circle-pending");
       setNote("Google did not finish. Try again.");
+      window.history.replaceState({}, "", "/account");
       return;
     }
 
@@ -43,8 +45,7 @@ export function CircleWallet() {
       window.localStorage.removeItem("ipin-circle-pending");
       setNote("Google came back, but the wallet did not finish. Try again.");
       setBusy(false);
-    }, 12000);
-
+    }, 20000);
     const sdk = new W3SSdk(
       {
         appSettings: { appId },
@@ -58,11 +59,13 @@ export function CircleWallet() {
         void finish(sdk, error, result);
       },
     );
+    void sdk.getDeviceId().catch(() => undefined);
 
     async function finish(current: W3SSdk, error: unknown, result: { userToken?: string; encryptionKey?: string } | undefined) {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
+      window.history.replaceState({}, "", "/account");
       if (error || !result?.userToken || !result.encryptionKey) {
         window.localStorage.removeItem("ipin-circle-pending");
         setNote("Couldn't finish the Google prompt. Try again.");
@@ -111,7 +114,6 @@ export function CircleWallet() {
         setBusy(false);
       });
     }
-
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -121,14 +123,26 @@ export function CircleWallet() {
     const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
     let sdk: W3SSdk;
     try {
-      sdk = new W3SSdk({
-        appSettings: { appId },
-        loginConfigs: {
-          deviceToken: window.localStorage.getItem("ipin-circle-token") || "",
-          deviceEncryptionKey: window.localStorage.getItem("ipin-circle-key") || "",
-          google: { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl() },
+      sdk = new W3SSdk(
+        {
+          appSettings: { appId },
+          loginConfigs: {
+            deviceToken: window.localStorage.getItem("ipin-circle-token") || "",
+            deviceEncryptionKey: window.localStorage.getItem("ipin-circle-key") || "",
+            google: { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl() },
+          },
         },
-      });
+        (error, result) => {
+          if (error || !result || !("userToken" in result)) {
+            setNote("Couldn't finish the Google prompt. Try again.");
+            setBusy(false);
+            return;
+          }
+          window.localStorage.setItem("ipin-circle-user", result.userToken);
+          window.localStorage.setItem("ipin-circle-user-key", result.encryptionKey);
+          setNote("Google confirmed. Creating the Arc wallet.");
+        },
+      );
     } catch {
       setNote("This browser blocked the wallet start. Allow popups and try again.");
       setBusy(false);
