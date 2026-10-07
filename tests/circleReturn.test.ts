@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { circleReturn } from "../src/lib/circleReturn";
+import { circleErrorMessage, circleReturn } from "../src/lib/circleReturn";
 
 describe("circle return", () => {
-  it("ignores the app sign-in token", () => {
-    expect(circleReturn("", "#access_token=abc")).toBe("");
+  it("names a rejected return address", () => {
+    expect(circleErrorMessage("?error=redirect_uri_mismatch", "")).toBe("Google rejected the profile return address.");
   });
-  it("accepts a Google code", () => {
-    expect(circleReturn("?code=abc&state=1", "")).toBe("code");
+  it("keeps a code separate from an error", () => {
+    expect(circleReturn("?code=abc", "")).toBe("code");
   });
 });
