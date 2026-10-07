@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CIRCLE_APP_ID } from "@/lib/circle";
 import { circleErrorMessage, circleReturn } from "@/lib/circleReturn";
+import { supabaseBrowser } from "@/lib/supabase";
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
 
 const GOOGLE_CLIENT_ID = "12931803157-318qbgo8ijiqionm6hd22ofm4qvsl41l.apps.googleusercontent.com";
@@ -13,6 +14,13 @@ function returnUrl() {
 
 function googleConfig() {
   return { clientId: GOOGLE_CLIENT_ID, redirectUri: returnUrl(), selectAccountPrompt: true };
+}
+
+async function authHeaders() {
+  const supabase = supabaseBrowser();
+  const session = supabase ? (await supabase.auth.getSession()).data.session : null;
+  if (!session?.access_token) return null;
+  return { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" };
 }
 
 export function CircleWallet() {
@@ -76,10 +84,16 @@ export function CircleWallet() {
         setBusy(false);
         return;
       }
+      const headers = await authHeaders();
+      if (!headers) {
+        setNote("Sign in before creating a wallet.");
+        setBusy(false);
+        return;
+      }
       const created = await fetch("/api/circle/wallet", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userToken: result.userToken, encryptionKey: result.encryptionKey }),
+        headers,
+        body: JSON.stringify({ userToken: result.userToken }),
       });
       const json = await created.json().catch(() => ({}));
       if (!created.ok) {
@@ -108,8 +122,8 @@ export function CircleWallet() {
         }
         const listed = await fetch("/api/circle/wallet", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userToken: result.userToken, encryptionKey: result.encryptionKey }),
+          headers,
+          body: JSON.stringify({ userToken: result.userToken }),
         });
         const listedJson = await listed.json().catch(() => ({}));
         window.localStorage.removeItem("ipin-circle-pending");
@@ -124,6 +138,12 @@ export function CircleWallet() {
   async function start() {
     setBusy(true);
     setNote("Starting the Arc wallet.");
+    const headers = await authHeaders();
+    if (!headers) {
+      setNote("Sign in before starting a wallet.");
+      setBusy(false);
+      return;
+    }
     const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
     let sdk: W3SSdk;
     try {
@@ -162,7 +182,7 @@ export function CircleWallet() {
     }
     const session = await fetch("/api/circle/session", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ deviceId, idempotencyKey: crypto.randomUUID() }),
     }).catch(() => null);
     if (!session) {
