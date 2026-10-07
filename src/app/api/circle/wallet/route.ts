@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { circleHost, circleKey, circleReady } from "@/lib/circle";
+import { signedIn } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!(await signedIn(request))) {
+    return NextResponse.json({ error: "Sign in before creating a wallet." }, { status: 401 });
+  }
   const apiKey = circleKey(process.env);
   if (!circleReady(apiKey, "app")) {
     return NextResponse.json({ error: "Circle is not ready on this deploy yet." }, { status: 503 });
