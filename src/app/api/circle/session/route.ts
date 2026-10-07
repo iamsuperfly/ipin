@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { CIRCLE_APP_ID, circleFailure, circleHost, circleKey, circleReady, socialTokenBody } from "@/lib/circle";
+import { signedIn } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!(await signedIn(request))) {
+    return NextResponse.json({ error: "Sign in before starting a wallet." }, { status: 401 });
+  }
   const apiKey = circleKey(process.env);
   const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
   if (!circleReady(apiKey, appId)) {
