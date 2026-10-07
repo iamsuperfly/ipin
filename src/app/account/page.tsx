@@ -101,7 +101,8 @@ export default function AccountPage() {
   if (!user) {
     return (
       <main className="mx-auto max-w-lg px-5 pb-24 pt-8">
-        <h1 className="text-4xl font-bold">Sign in</h1>
+        <CircleWallet />
+        <h1 className="mt-8 text-4xl font-bold">Sign in</h1>
         <button type="button" className="btn-primary mt-6 w-full" onClick={google}>Continue with Google</button>
         {note && <p className="mt-3 text-sm text-mute">{note}</p>}
       </main>

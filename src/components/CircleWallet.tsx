@@ -10,18 +10,41 @@ function returnUrl() {
   return `${window.location.origin}/account`;
 }
 
+function googleCameBack() {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return ["code", "state", "error", "access_token"].some((key) => query.has(key) || hash.has(key));
+}
+
 export function CircleWallet() {
   const [note, setNote] = useState("An Arc wallet is separate from the connected wallet.");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (window.localStorage.getItem("ipin-circle-pending") !== "1") return;
+    const pending = window.localStorage.getItem("ipin-circle-pending") === "1";
+    const returned = googleCameBack();
+    if (!pending && !returned) return;
+    if (!returned) {
+      window.localStorage.removeItem("ipin-circle-pending");
+      setNote("Google did not finish. Try again.");
+      return;
+    }
+
     const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID || CIRCLE_APP_ID;
     const deviceToken = window.localStorage.getItem("ipin-circle-token") || "";
     const deviceEncryptionKey = window.localStorage.getItem("ipin-circle-key") || "";
+    let settled = false;
     setBusy(true);
     setNote("Finishing the Arc wallet.");
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      window.localStorage.removeItem("ipin-circle-pending");
+      setNote("Google came back, but the wallet did not finish. Try again.");
+      setBusy(false);
+    }, 12000);
+
     const sdk = new W3SSdk(
       {
         appSettings: { appId },
@@ -37,6 +60,9 @@ export function CircleWallet() {
     );
 
     async function finish(current: W3SSdk, error: unknown, result: { userToken?: string; encryptionKey?: string } | undefined) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
       if (error || !result?.userToken || !result.encryptionKey) {
         window.localStorage.removeItem("ipin-circle-pending");
         setNote("Couldn't finish the Google prompt. Try again.");
@@ -85,6 +111,8 @@ export function CircleWallet() {
         setBusy(false);
       });
     }
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function start() {
