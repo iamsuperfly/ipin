@@ -25,6 +25,15 @@ export async function POST(request: Request) {
   const existingJson = await existing.json().catch(() => ({}));
   const address = existingJson.data?.wallets?.find((wallet: { blockchain?: string; address?: string }) => wallet.blockchain === "ARC-TESTNET")?.address;
   if (address) return NextResponse.json({ address });
+  const initialized = await fetch(`${circleHost(apiKey)}/v1/w3s/user/initialize`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), blockchains: ["ARC-TESTNET"] }),
+  });
+  const initializedJson = await initialized.json().catch(() => ({}));
+  if (initialized.ok && initializedJson.data?.challengeId) {
+    return NextResponse.json({ challengeId: initializedJson.data.challengeId });
+  }
   const created = await fetch(`${circleHost(apiKey)}/v1/w3s/user/wallets`, {
     method: "POST",
     headers,
