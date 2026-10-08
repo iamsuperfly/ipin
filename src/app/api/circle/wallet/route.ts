@@ -28,20 +28,12 @@ export async function POST(request: Request) {
   const initialized = await fetch(`${circleHost(apiKey)}/v1/w3s/user/initialize`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), blockchains: ["ARC-TESTNET"] }),
+    body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), accountType: "SCA", blockchains: ["ARC-TESTNET"] }),
   });
   const initializedJson = await initialized.json().catch(() => ({}));
-  if (initialized.ok && initializedJson.data?.challengeId) {
-    return NextResponse.json({ challengeId: initializedJson.data.challengeId });
-  }
-  const created = await fetch(`${circleHost(apiKey)}/v1/w3s/user/wallets`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), blockchains: ["ARC-TESTNET"] }),
-  });
-  const createdJson = await created.json().catch(() => ({}));
-  if (!created.ok) {
+  if (initializedJson.code === 155106) return NextResponse.json({ address: "" });
+  if (!initialized.ok || !initializedJson.data?.challengeId) {
     return NextResponse.json({ error: "Couldn't create the Arc wallet. Try again." }, { status: 502 });
   }
-  return NextResponse.json({ challengeId: createdJson.data?.challengeId });
+  return NextResponse.json({ challengeId: initializedJson.data.challengeId });
 }
