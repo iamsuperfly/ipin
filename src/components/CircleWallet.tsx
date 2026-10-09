@@ -164,7 +164,7 @@ export function CircleWallet() {
         },
       });
       setNote("Choose the Google account. You will come back here.");
-      await sdk.performLogin("GOOGLE" as Parameters<W3SSdk["performLogin"]>[0]);
+      await sdk.performLogin("Google" as Parameters<W3SSdk["performLogin"]>[0]);
     } catch (error) {
       setNote(sdkError(error));
       setBusy(false);
