@@ -1,18 +1,47 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase";
 
 export default function AuthCallback() {
   const router = useRouter();
+  const [note, setNote] = useState("Signing you in.");
+
   useEffect(() => {
     const supabase = supabaseBrowser();
     if (!supabase) {
-      router.replace("/account");
+      setNote("Couldn't sign in. Try again.");
       return;
     }
-    supabase.auth.getSession().finally(() => router.replace("/account"));
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const returned = params.get("error_description") || params.get("error");
+    if (returned) {
+      setNote(returned);
+      return;
+    }
+    async function finish() {
+      if (code) {
+        const exchanged = await supabase.auth.exchangeCodeForSession(code);
+        if (exchanged.error) {
+          setNote(exchanged.error.message || "Couldn't finish Google sign-in.");
+          return;
+        }
+      }
+      const { data, error } = await supabase.auth.getSession();
+      if (error || !data.session) {
+        setNote(error?.message || "Google came back, but the session was not saved.");
+        return;
+      }
+      router.replace("/account");
+    }
+    void finish();
   }, [router]);
-  return <main className="px-5 pt-16">Signing you in…</main>;
+
+  return (
+    <main className="mx-auto max-w-lg px-5 pt-16">
+      <p className="text-sm text-mute">{note}</p>
+    </main>
+  );
 }
