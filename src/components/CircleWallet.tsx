@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { CIRCLE_APP_ID } from "@/lib/circle";
 import { supabaseBrowser } from "@/lib/supabase";
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
@@ -48,15 +48,31 @@ async function authHeaders() {
   return { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" };
 }
 
+async function saveCircle(address: string) {
+  const supabase = supabaseBrowser();
+  const user = supabase ? (await supabase.auth.getUser()).data.user : null;
+  if (!supabase || !user) return "Sign in before saving the wallet.";
+  await supabase.from("wallets").update({ is_active: false }).eq("account_id", user.id);
+  const saved = await supabase.from("wallets").upsert(
+    { account_id: user.id, address: address.toLowerCase(), is_active: true, kind: "circle" },
+    { onConflict: "account_id,address" },
+  );
+  if (saved.error) return "Couldn't save the Arc wallet. Run the new schema, then try again.";
+  window.localStorage.setItem("ipin-circle-address", address);
+  return "";
+}
+
 export function CircleWallet() {
   const path = usePathname();
+  const router = useRouter();
   const sdkRef = useRef<W3SSdk | null>(null);
   const [note, setNote] = useState("An Arc wallet is separate from the connected wallet.");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
-  const [login, setLogin] = useState<{ userToken: string; encryptionKey: string } | null>(null);
 
   useEffect(() => {
+    const saved = window.localStorage.getItem("ipin-circle-address") || "";
+    if (saved) setAddress(saved);
     const sdk = new W3SSdk(
       {
         appSettings: { appId: getCookie("appId") || APP_ID },
@@ -72,13 +88,28 @@ export function CircleWallet() {
           setBusy(false);
           return;
         }
-        setLogin({ userToken: result.userToken, encryptionKey: result.encryptionKey });
+        router.replace("/account");
         setNote("Google confirmed. Creating the Arc wallet.");
         void createWallet(sdk, result.userToken, result.encryptionKey);
       },
     );
     sdkRef.current = sdk;
-  }, []);
+  }, [router]);
+
+  async function listedAddress(headers: Record<string, string>, userToken: string) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const listed = await fetch("/api/circle/wallet", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ userToken }),
+      });
+      const json = await listed.json().catch(() => ({}));
+      if (json.address) return json.address as string;
+      if (json.challengeId) return "";
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+    }
+    return "";
+  }
 
   async function createWallet(sdk: W3SSdk, userToken: string, encryptionKey: string) {
     const headers = await authHeaders();
@@ -94,32 +125,37 @@ export function CircleWallet() {
     });
     const json = await created.json().catch(() => ({}));
     if (json.address) {
+      const failed = await saveCircle(json.address);
       setAddress(json.address);
-      setNote("Arc wallet ready.");
+      setNote(failed || "Arc wallet ready.");
       setBusy(false);
+      router.replace("/account");
       return;
     }
     if (!json.challengeId) {
-      setNote(json.error || "Couldn't create the Arc wallet. Try again.");
+      setNote(json.error || "Circle has not created the wallet yet.");
       setBusy(false);
       return;
     }
     sdk.setAuthentication({ userToken, encryptionKey });
+    setNote("Confirm the wallet prompt.");
     sdk.execute(json.challengeId, async (challengeError) => {
       if (challengeError) {
         setNote(sdkError(challengeError));
         setBusy(false);
         return;
       }
-      const listed = await fetch("/api/circle/wallet", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ userToken }),
-      });
-      const listedJson = await listed.json().catch(() => ({}));
-      setAddress(listedJson.address || "");
-      setNote(listedJson.address ? "Arc wallet ready." : "Wallet created. Refresh if the address is not here yet.");
+      const found = await listedAddress(headers, userToken);
+      if (!found) {
+        setNote("Circle confirmed Google, but no Arc address exists yet.");
+        setBusy(false);
+        return;
+      }
+      const failed = await saveCircle(found);
+      setAddress(found);
+      setNote(failed || "Arc wallet ready.");
       setBusy(false);
+      router.replace("/account");
     });
   }
 
@@ -177,7 +213,6 @@ export function CircleWallet() {
       <div className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
         <p className="text-sm text-mute">{note}</p>
         {address && <p className="mt-2 font-mono text-sm">{address}</p>}
-        {login && !address && <p className="mt-2 text-sm text-mute">Google is confirmed.</p>}
         <button type="button" className="btn-primary mt-3 w-full" disabled={busy} onClick={start}>
           {busy ? "Starting" : "Start Arc wallet"}
         </button>

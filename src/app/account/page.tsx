@@ -8,7 +8,7 @@ import { Avatar } from "@/components/Avatar";
 import { supabaseBrowser } from "@/lib/supabase";
 import { shortAddr } from "@/lib/format";
 
-type WalletRow = { id: string; address: string; is_active: boolean };
+type WalletRow = { id: string; address: string; is_active: boolean; kind?: string };
 type Dist = { id: string; name: string; pool_amount: number; status: string; pot_id: number | null };
 
 export default function AccountPage() {
@@ -34,7 +34,7 @@ export default function AccountPage() {
     const meta = data.user.user_metadata as { full_name?: string; name?: string; avatar_url?: string; picture?: string };
     setName(row.data?.display_name || meta.full_name || meta.name || "");
     setPic(row.data?.avatar_url || meta.avatar_url || meta.picture || null);
-    const walletRows = await supabase.from("wallets").select("id,address,is_active").order("created_at");
+    const walletRows = await supabase.from("wallets").select("id,address,is_active,kind").order("created_at");
     setWallets((walletRows.data as WalletRow[]) ?? []);
     const list = await supabase.from("campaigns").select("id,name,pool_amount,status,pot_id").order("created_at", { ascending: false });
     setRows((list.data as Dist[]) ?? []);
@@ -75,8 +75,8 @@ export default function AccountPage() {
 
   async function attach() {
     if (!supabase || !address || !user) return;
-    const active = wallets.length === 0;
-    await supabase.from("wallets").upsert({ account_id: user.id, address: address.toLowerCase(), is_active: active }, { onConflict: "account_id,address" });
+    const circle = wallets.find((wallet) => wallet.kind === "circle");
+    await supabase.from("wallets").upsert({ account_id: user.id, address: address.toLowerCase(), is_active: !circle, kind: "connected" }, { onConflict: "account_id,address" });
     await refresh();
   }
 
@@ -109,7 +109,8 @@ export default function AccountPage() {
 
   const waiting = rows.filter((r) => r.status !== "done");
   const done = rows.filter((r) => r.status === "done");
-  const active = wallets.find((w) => w.is_active);
+  const circle = wallets.find((w) => w.kind === "circle");
+  const active = circle || wallets.find((w) => w.is_active);
   const sent = done.reduce((sum, row) => sum + Number(row.pool_amount || 0), 0);
   const waitingTotal = waiting.reduce((sum, row) => sum + Number(row.pool_amount || 0), 0);
 
@@ -121,6 +122,7 @@ export default function AccountPage() {
           <h1 className="truncate text-3xl font-bold">{name || "Profile"}</h1>
           <p className="truncate text-mute">{user.email}</p>
           <p className="mt-1 font-mono text-sm">{active ? shortAddr(active.address) : "No active wallet"}</p>
+          {circle && <p className="text-sm text-laterite">Arc wallet</p>}
         </div>
       </div>
       <button type="button" className="btn-ghost mt-4 h-11 w-full text-sm" onClick={() => setEditing((v) => !v)}>{editing ? "Close" : "Edit"}</button>
@@ -173,8 +175,8 @@ export default function AccountPage() {
         <button type="button" className="btn-ghost w-full" onClick={attach} disabled={!isConnected}>Attach connected wallet</button>
         {wallets.map((w) => (
           <div key={w.id} className="flex items-center justify-between rounded-2xl border border-ink/10 bg-panel px-4 py-3">
-            <span className="font-mono text-sm">{shortAddr(w.address)}</span>
-            {w.is_active ? <span className="text-sm text-laterite">Active</span> : <button type="button" className="btn-ghost h-11 px-4 text-sm" onClick={() => makeActive(w.id)}>Make active</button>}
+            <span className="font-mono text-sm">{shortAddr(w.address)}{w.kind === "circle" ? " · Arc" : ""}</span>
+            {w.kind === "circle" || w.is_active ? <span className="text-sm text-laterite">Active</span> : <button type="button" className="btn-ghost h-11 px-4 text-sm" onClick={() => makeActive(w.id)}>Make active</button>}
           </div>
         ))}
         {note && <p className="text-sm text-mute">{note}</p>}
