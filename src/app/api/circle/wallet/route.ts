@@ -4,6 +4,12 @@ import { signedIn } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
+function arcAddress(wallets: { blockchain?: string; address?: string }[] | undefined) {
+  const rows = wallets ?? [];
+  const match = rows.find((wallet) => String(wallet.blockchain || "").toUpperCase().includes("ARC") && wallet.address);
+  return match?.address || rows.find((wallet) => wallet.address)?.address || "";
+}
+
 export async function POST(request: Request) {
   if (!(await signedIn(request))) {
     return NextResponse.json({ error: "Sign in before creating a wallet." }, { status: 401 });
@@ -23,7 +29,7 @@ export async function POST(request: Request) {
   };
   const existing = await fetch(`${circleHost(apiKey)}/v1/w3s/wallets`, { headers });
   const existingJson = await existing.json().catch(() => ({}));
-  const address = existingJson.data?.wallets?.find((wallet: { blockchain?: string; address?: string }) => wallet.blockchain === "ARC-TESTNET")?.address;
+  const address = arcAddress(existingJson.data?.wallets);
   if (address) return NextResponse.json({ address });
   const initialized = await fetch(`${circleHost(apiKey)}/v1/w3s/user/initialize`, {
     method: "POST",
