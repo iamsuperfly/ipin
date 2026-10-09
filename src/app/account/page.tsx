@@ -50,7 +50,18 @@ export default function AccountPage() {
       setNote("Couldn't sign in. Try again.");
       return;
     }
-    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/auth/callback` } });
+    setNote("Opening Google.");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) {
+      setNote(error.message || "Couldn't sign in. Try again.");
+      return;
+    }
+    window.setTimeout(() => {
+      setNote((current) => (current === "Opening Google." ? "Google did not open. Try again." : current));
+    }, 2500);
   }
 
   async function saveName() {
@@ -179,7 +190,7 @@ export default function AccountPage() {
         <button type="button" className="btn-ghost w-full" onClick={attach} disabled={!isConnected}>Attach connected wallet</button>
         {wallets.map((w) => (
           <div key={w.id} className="flex items-center justify-between rounded-2xl border border-ink/10 bg-panel px-4 py-3">
-            <span className="font-mono text-sm">{shortAddr(w.address)}{w.kind === "circle" ? " \u00b7 Arc" : ""}</span>
+            <span className="font-mono text-sm">{shortAddr(w.address)}{w.kind === "circle" ? " · Arc" : ""}</span>
             {w.kind === "circle" || w.is_active ? <span className="text-sm text-laterite">Active</span> : <button type="button" className="btn-ghost h-11 px-4 text-sm" onClick={() => makeActive(w.id)}>Make active</button>}
           </div>
         ))}
