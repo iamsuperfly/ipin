@@ -3,7 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { WagmiProvider } from "wagmi";
-import { CircleWallet } from "@/components/CircleWallet";
+import { CircleHost } from "@/components/CircleWallet";
 import { config } from "@/lib/wagmi";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -11,7 +11,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={client}>
-        <CircleWallet />
+        <CircleHost />
         {children}
       </QueryClientProvider>
     </WagmiProvider>
