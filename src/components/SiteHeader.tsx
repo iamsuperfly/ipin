@@ -24,6 +24,12 @@ function nameOf(user: User | null, stored: string | null) {
   return meta?.full_name || meta?.name || user?.email || "You";
 }
 
+function clearCircle() {
+  ["appId", "google.clientId", "deviceToken", "deviceEncryptionKey"].forEach((name) => {
+    document.cookie = `${name}=; path=/; max-age=0; samesite=lax`;
+  });
+}
+
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -54,6 +60,7 @@ export function SiteHeader() {
   async function signOut() {
     const sb = supabaseBrowser();
     await sb?.auth.signOut();
+    clearCircle();
     setMenu(false);
     setOpen(false);
   }
