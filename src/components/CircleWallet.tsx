@@ -26,6 +26,21 @@ function googleConfig() {
   };
 }
 
+function sdkError(error: unknown) {
+  if (!error) return "Circle returned no login result.";
+  if (typeof error === "string") return error;
+  if (error instanceof Error && error.message) return error.message;
+  const value = error as { message?: string; code?: string | number; error?: string };
+  const message = value.message || value.error;
+  if (message && value.code) return `${value.code}: ${message}`;
+  if (message) return message;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Circle returned an unreadable login error.";
+  }
+}
+
 async function authHeaders() {
   const supabase = supabaseBrowser();
   const session = supabase ? (await supabase.auth.getSession()).data.session : null;
@@ -53,7 +68,7 @@ export function CircleWallet() {
       },
       (error, result) => {
         if (error || !result || !("userToken" in result) || !result.encryptionKey) {
-          setNote("Google did not finish. Try again.");
+          setNote(sdkError(error));
           setBusy(false);
           return;
         }
@@ -92,7 +107,7 @@ export function CircleWallet() {
     sdk.setAuthentication({ userToken, encryptionKey });
     sdk.execute(json.challengeId, async (challengeError) => {
       if (challengeError) {
-        setNote("Couldn't create the Arc wallet. Try again.");
+        setNote(sdkError(challengeError));
         setBusy(false);
         return;
       }
@@ -150,8 +165,8 @@ export function CircleWallet() {
       });
       setNote("Choose the Google account. You will come back here.");
       await sdk.performLogin("GOOGLE" as Parameters<W3SSdk["performLogin"]>[0]);
-    } catch {
-      setNote("Couldn't open Google. Try again.");
+    } catch (error) {
+      setNote(sdkError(error));
       setBusy(false);
     }
   }
