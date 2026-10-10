@@ -31,6 +31,11 @@ export default function AuthCallback() {
       if (code) {
         const exchanged = await client.auth.exchangeCodeForSession(code);
         if (exchanged.error) {
+          const existing = await client.auth.getSession();
+          if (existing.data.session) {
+            router.replace("/account");
+            return;
+          }
           setNote(plain(exchanged.error.message || "Couldn't finish Google sign-in."));
           return;
         }
