@@ -14,6 +14,7 @@ export default function AuthCallback() {
       setNote("Couldn't sign in. Try again.");
       return;
     }
+    const client = supabase;
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     const returned = params.get("error_description") || params.get("error");
@@ -23,13 +24,13 @@ export default function AuthCallback() {
     }
     async function finish() {
       if (code) {
-        const exchanged = await supabase.auth.exchangeCodeForSession(code);
+        const exchanged = await client.auth.exchangeCodeForSession(code);
         if (exchanged.error) {
           setNote(exchanged.error.message || "Couldn't finish Google sign-in.");
           return;
         }
       }
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await client.auth.getSession();
       if (error || !data.session) {
         setNote(error?.message || "Google came back, but the session was not saved.");
         return;
