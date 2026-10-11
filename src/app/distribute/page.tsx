@@ -1,11 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { decodeEventLog, isAddress } from "viem";
+import { decodeEventLog, encodeFunctionData, isAddress } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
-import { ConnectButton } from "@/components/ConnectButton";
-import { ipinAbi } from "@/lib/abi";
+import { ipinAbi, erc20Abi } from "@/lib/abi";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
 import { quoteFee } from "@/lib/fee";
@@ -32,11 +32,17 @@ export default function DistributePage() {
   const contract = ipinAddress();
   const client = usePublicClient();
   const { isConnected } = useAccount();
+  const [arc, setArc] = useState("");
   const [name, setName] = useState("");
   const [total, setTotal] = useState("100");
   const [rows, setRows] = useState<Row[]>([{ address: "", amount: "50", edited: false }, { address: "", amount: "50", edited: false }]);
+  const [note, setNote] = useState("");
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  useEffect(() => {
+    setArc(window.localStorage.getItem("ipin-circle-address") || "");
+  }, []);
 
   useEffect(() => {
     if (!isSuccess || !hash || !client || !contract) return;
@@ -45,26 +51,14 @@ export default function DistributePage() {
       if (gone) return;
       const created = receipt.logs
         .map((log) => {
-          try {
-            return decodeEventLog({ abi: ipinAbi, data: log.data, topics: log.topics });
-          } catch {
-            return null;
-          }
+          try { return decodeEventLog({ abi: ipinAbi, data: log.data, topics: log.topics }); } catch { return null; }
         })
         .find((log) => log?.eventName === "PotCreated");
       const potId = created && "args" in created ? created.args.id : null;
       if (potId == null) return;
-      const sb = supabaseBrowser();
-      const user = sb ? (await sb.auth.getUser()).data.user : null;
-      if (sb && user) {
-        const row = await sb.from("campaigns").select("id").eq("account_id", user.id).is("pot_id", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
-        if (row.data?.id) await sb.from("campaigns").update({ pot_id: Number(potId) }).eq("id", row.data.id);
-      }
       router.replace(`/pot/${potId.toString()}`);
     });
-    return () => {
-      gone = true;
-    };
+    return () => { gone = true; };
   }, [isSuccess, hash, client, contract, router]);
 
   const even = useMemo(() => split(total, rows), [total, rows]);
@@ -75,22 +69,76 @@ export default function DistributePage() {
     setRows(split(total, [...rows, { address: "", amount: "0", edited: false }]));
   }
 
-  async function submit() {
-    if (!contract || !name.trim()) return;
-    const members = even.map((r) => r.address.trim());
-    if (members.some((m) => !isAddress(m))) return;
-    const shares = even.map((r) => parseUsdc(r.amount || "0"));
-    writeContract({
-      address: contract,
-      abi: ipinAbi,
-      functionName: "createPot",
-      args: [name.trim(), USDC, members as `0x${string}`[], shares],
-    });
+  async function saveCampaign() {
     const sb = supabaseBrowser();
     const user = sb ? (await sb.auth.getUser()).data.user : null;
     if (sb && user) {
       await sb.from("campaigns").insert({ account_id: user.id, name: name.trim(), pool_amount: Number(formatUsdc(pool)), status: "waiting" });
     }
+  }
+
+  async function circleCreate() {
+    if (!contract) return;
+    const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
+    const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
+    if (!userToken || !walletId) {
+      setNote("Open the Arc wallet once so it can sign.");
+      return;
+    }
+    const headers = await (async () => {
+      const sb = supabaseBrowser();
+      const session = sb ? (await sb.auth.getSession()).data.session : null;
+      return session ? { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" } : null;
+    })();
+    if (!headers) {
+      setNote("Sign in before creating a distribution.");
+      return;
+    }
+    const callData = encodeFunctionData({
+      abi: ipinAbi,
+      functionName: "createPot",
+      args: [name.trim(), USDC, even.map((row) => row.address.trim() as `0x${string}`), even.map((row) => parseUsdc(row.amount || "0"))],
+    });
+    const created = await fetch("/api/circle/tx", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ kind: "contract", userToken, walletId, contractAddress: contract, callData }),
+    });
+    const json = await created.json().catch(() => ({}));
+    if (!created.ok || !json.challengeId) {
+      setNote(json.error || "Couldn't ask the Arc wallet to create it.");
+      return;
+    }
+    setNote("Confirm in the Arc wallet.");
+    window.dispatchEvent(new CustomEvent("ipin-circle-exec", { detail: json.challengeId }));
+  }
+
+  async function submit() {
+    if (!contract || !name.trim()) return;
+    const members = even.map((r) => r.address.trim());
+    if (members.some((m) => !isAddress(m))) return;
+    await saveCampaign();
+    if (arc) {
+      if (isConnected) {
+        setNote("Sending the amount to the Arc wallet. The Arc wallet creates it next.");
+        writeContract({
+          address: USDC,
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [arc as `0x${string}`, pool + quote.fee],
+        });
+        await circleCreate();
+        return;
+      }
+      await circleCreate();
+      return;
+    }
+    writeContract({
+      address: contract,
+      abi: ipinAbi,
+      functionName: "createPot",
+      args: [name.trim(), USDC, members as `0x${string}`[], even.map((r) => parseUsdc(r.amount || "0"))],
+    });
   }
 
   return (
@@ -109,11 +157,16 @@ export default function DistributePage() {
           </div>
         ))}
         <button type="button" className="btn-ghost w-full" onClick={add}>Add recipient</button>
-        <p className="text-sm text-mute">Recipients receive {formatUsdc(pool)} USDC. Fee on top: {formatUsdc(quote.fee)}. Fund that total from the distribution after it is created.</p>
-        {isConnected ? (
+        <p className="text-sm text-mute">Recipients receive {formatUsdc(pool)} USDC. Fee on top: {formatUsdc(quote.fee)}. {arc ? "The Arc wallet signs this." : "Start the Arc wallet to sign without connecting."}</p>
+        {arc ? (
           <button type="button" className="btn-primary w-full" disabled={!contract || isPending || isLoading} onClick={submit}>{isPending || isLoading ? "Creating\u2026" : "Create distribution"}</button>
-        ) : <ConnectButton className="w-full" />}
+        ) : isConnected ? (
+          <button type="button" className="btn-primary w-full" disabled={!contract || isPending || isLoading} onClick={submit}>{isPending || isLoading ? "Creating\u2026" : "Create distribution"}</button>
+        ) : (
+          <Link href="/account" className="btn-primary block text-center">Start the Arc wallet</Link>
+        )}
         {isSuccess && <p className="text-sm text-mute">Created. Opening it so you can fund and pay.</p>}
+        {note && <p className="text-sm text-mute">{note}</p>}
         {error && <p className="text-sm text-danger">{writeErrorText(error)}</p>}
       </div>
     </main>
