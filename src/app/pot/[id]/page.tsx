@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { encodeFunctionData, isAddress } from "viem";
 import {
   useAccount,
   useReadContract,
@@ -26,10 +27,17 @@ export default function PotPage() {
   const id = BigInt(params.id || "0");
   const contract = ipinAddress();
   const { address, isConnected } = useAccount();
+  const [arc, setArc] = useState("");
   const [amount, setAmount] = useState("");
   const [locked, setLocked] = useState(false);
   const [note, setNote] = useState("");
   const [action, setAction] = useState("");
+  const [withdrawTo, setWithdrawTo] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+
+  useEffect(() => {
+    setArc(window.localStorage.getItem("ipin-circle-address") || "");
+  }, []);
 
   const pot = useReadContract({
     address: contract,
@@ -94,39 +102,59 @@ export default function PotPage() {
       setNote(action === "withdraw" ? "Withdraw sent." : "Fund sent. The balance updates when Arc confirms.");
       return;
     }
-    if (action !== "pay") return;
-    const sb = supabaseBrowser();
-    if (!sb) return;
-    sb.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
-      const campaign = await sb.from("campaigns").select("id,pool_amount").eq("pot_id", Number(id)).maybeSingle();
-      const saved = campaign.data;
-      if (!saved?.id) return;
-      const members = roster.data?.[0] ?? [];
-      const shares = roster.data?.[1] ?? [];
-      const total = shares.reduce((sum, share) => sum + BigInt(share), 0n);
-      const pool = BigInt(Math.round(Number(saved.pool_amount) * 1_000_000));
-      if (members.length && total > 0n) {
-        await sb.from("allocations").insert(members.map((member, i) => ({
-          campaign_id: saved.id,
-          recipient: member.toLowerCase(),
-          amount: Number(formatUsdc((pool * BigInt(shares[i])) / total)),
-          tx_hash: hash,
-          paid: true,
-        })));
-      }
-      await sb.from("distributions").insert({
-        account_id: data.user.id,
-        campaign_id: saved.id,
-        pot_id: Number(id),
-        gross: saved.pool_amount,
-        fee: 0,
-        tx_hash: hash,
-        status: "done",
-      });
-      await sb.from("campaigns").update({ status: "done" }).eq("id", saved.id);
-    });
   }, [isSuccess, hash, action, amount, contract, id, pot, roster, walletUsdc, allowance]);
+
+  async function circleCall(functionName: "fund" | "payAll", args: readonly unknown[]) {
+    if (!contract) return;
+    const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
+    const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
+    const sb = supabaseBrowser();
+    const session = sb ? (await sb.auth.getSession()).data.session : null;
+    if (!session || !userToken || !walletId) {
+      setNote("Open the Arc wallet once so it can sign.");
+      return;
+    }
+    const callData = encodeFunctionData({ abi: ipinAbi, functionName, args: args as never });
+    const created = await fetch("/api/circle/tx", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "contract", userToken, walletId, contractAddress: contract, callData }),
+    });
+    const json = await created.json().catch(() => ({}));
+    if (!created.ok || !json.challengeId) {
+      setNote(json.error || "Couldn't ask the Arc wallet to sign.");
+      return;
+    }
+    setNote("Confirm in the Arc wallet.");
+    window.dispatchEvent(new CustomEvent("ipin-circle-exec", { detail: json.challengeId }));
+  }
+
+  async function withdrawArc() {
+    if (!isAddress(withdrawTo) || !withdrawAmount) {
+      setNote("Enter an address and an amount.");
+      return;
+    }
+    const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
+    const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
+    const sb = supabaseBrowser();
+    const session = sb ? (await sb.auth.getSession()).data.session : null;
+    if (!session || !userToken || !walletId) {
+      setNote("Open the Arc wallet once so it can send.");
+      return;
+    }
+    const created = await fetch("/api/circle/tx", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "transfer", userToken, walletId, to: withdrawTo, amount: withdrawAmount }),
+    });
+    const json = await created.json().catch(() => ({}));
+    if (!created.ok || !json.challengeId) {
+      setNote(json.error || "Couldn't send from the Arc wallet.");
+      return;
+    }
+    setNote("Confirm the send in the Arc wallet.");
+    window.dispatchEvent(new CustomEvent("ipin-circle-exec", { detail: json.challengeId }));
+  }
 
   const busy = isPending || waiting;
   const data = pot.data;
@@ -137,7 +165,8 @@ export default function PotPage() {
   const round = data?.[5] ?? 0;
   const balance = (data?.[6] ?? 0n) as bigint;
   const symbol = tokenSymbol(token);
-  const isOwner = Boolean(address && owner && address.toLowerCase() === owner.toLowerCase());
+  const arcOwns = Boolean(arc && owner && arc.toLowerCase() === owner.toLowerCase());
+  const isOwner = arcOwns || Boolean(address && owner && address.toLowerCase() === owner.toLowerCase());
   const walletBalance = (walletUsdc.data ?? 0n) as bigint;
   const canPay = balance > 0n;
   const members = roster.data?.[0] ?? [];
@@ -147,6 +176,10 @@ export default function PotPage() {
   const fee = quoteFee(0n, units).fee;
 
   function fundOnce() {
+    if (arcOwns) {
+      void circleCall("fund", [id, units]);
+      return;
+    }
     if (!contract || !token) return;
     const step = nextFundStep(walletBalance, units + fee, (allowance.data ?? 0n) as bigint);
     if (step === "amount") {
@@ -197,7 +230,7 @@ export default function PotPage() {
         </div>
         <div className="rounded-3xl border border-ink/10 bg-panel p-6">
           <p className="text-sm text-mute">Your USDC on Arc</p>
-          <p className="mt-2 text-4xl font-bold tabular-nums">{isConnected ? formatUsdc(walletBalance) : "-"} USDC</p>
+          <p className="mt-2 text-4xl font-bold tabular-nums">{isConnected ? formatUsdc(walletBalance) : arc ? "Arc wallet" : "-"} USDC</p>
         </div>
       </div>
       <section className="mt-8 space-y-3">
@@ -219,10 +252,10 @@ export default function PotPage() {
       </section>
       <section className="mt-8 rounded-3xl border border-ink/10 bg-panel p-6">
         <h2 className="text-2xl font-bold">Fund</h2>
-        <p className="mt-1 text-sm text-mute">The amount is the one set at create. Two confirms: approval, then fund.</p>
+        <p className="mt-1 text-sm text-mute">{arcOwns ? "The Arc wallet signs this." : "The amount is the one set at create."}</p>
         <input value={amount} readOnly={locked} onChange={(e) => setAmount(e.target.value)} className="mt-4 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite" />
         {fee > 0n && <p className="mt-2 text-sm text-mute">Fee on top {formatUsdc(fee)} USDC. Recipients still get the full amount.</p>}
-        {isConnected ? (
+        {arcOwns || isConnected ? (
           <button type="button" className="btn-primary mt-4 w-full" disabled={busy || !contract} onClick={fundOnce}>
             {busy ? "Confirm in the wallet" : "Approve and fund"}
           </button>
@@ -232,13 +265,26 @@ export default function PotPage() {
       </section>
       {isOwner && (
         <button type="button" className="btn-primary mt-6 w-full" disabled={busy || !contract || !canPay} onClick={() => {
+          if (arcOwns) {
+            void circleCall("payAll", [id]);
+            return;
+          }
           setAction("pay");
           contract && writeContract({ address: contract, abi: ipinAbi, functionName: "payAll", args: [id] });
         }}>
           {canPay ? "Pay everyone" : "Pay everyone after it is funded"}
         </button>
       )}
-      {isOwner && (
+      {arc && (
+        <section className="mt-6 rounded-3xl border border-ink/10 bg-panel p-6">
+          <h2 className="text-2xl font-bold">Withdraw</h2>
+          <p className="mt-1 text-sm text-mute">Send from the Arc wallet to an address.</p>
+          <input value={withdrawTo} onChange={(e) => setWithdrawTo(e.target.value)} placeholder="0x" className="mt-4 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono text-sm outline-none focus:border-laterite" />
+          <input value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="Amount" className="mt-3 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite" />
+          <button type="button" className="btn-primary mt-4 w-full" onClick={withdrawArc}>Withdraw</button>
+        </section>
+      )}
+      {isOwner && !arcOwns && (
         <button type="button" className="btn-ghost mt-3 w-full" disabled={busy || !contract || balance === 0n} onClick={() => {
           setAction("withdraw");
           contract && writeContract({ address: contract, abi: withdrawAbi, functionName: "withdraw", args: [id] });
