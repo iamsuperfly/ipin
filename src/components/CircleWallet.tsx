@@ -94,7 +94,7 @@ export function CircleHost() {
   useEffect(() => {
     const saved = window.localStorage.getItem("ipin-circle-address") || "";
     if (saved) {
-      publish({ address: saved });
+      publish({ address: saved, note: "Arc wallet ready." });
       void readBalance(saved).then((balance) => publish({ balance }));
     }
     const sdk = new W3SSdk(
@@ -253,12 +253,13 @@ export function CircleCard() {
         </button>
       )}
       {local.address && <p className="mt-2 text-sm">{local.balance ? `${local.balance} USDC` : "Reading balance."}</p>}
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <a className="btn-ghost text-center" href={FAUCET} target="_blank" rel="noreferrer">Fund</a>
-        <button type="button" className="btn-primary" disabled={local.busy} onClick={() => window.dispatchEvent(new Event("ipin-circle-start"))}>
+      {local.address ? (
+        <a className="btn-ghost mt-3 block text-center" href={FAUCET} target="_blank" rel="noreferrer">Fund</a>
+      ) : (
+        <button type="button" className="btn-primary mt-3 w-full" disabled={local.busy} onClick={() => window.dispatchEvent(new Event("ipin-circle-start"))}>
           {local.busy ? "Starting" : "Start"}
         </button>
-      </div>
+      )}
     </div>
   );
 }
