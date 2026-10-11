@@ -4,10 +4,9 @@ import { signedIn } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-function arcAddress(wallets: { blockchain?: string; address?: string }[] | undefined) {
+function arcWallet(wallets: { id?: string; blockchain?: string; address?: string }[] | undefined) {
   const rows = wallets ?? [];
-  const match = rows.find((wallet) => String(wallet.blockchain || "").toUpperCase().includes("ARC") && wallet.address);
-  return match?.address || rows.find((wallet) => wallet.address)?.address || "";
+  return rows.find((wallet) => String(wallet.blockchain || "").toUpperCase().includes("ARC") && wallet.address) || rows.find((wallet) => wallet.address);
 }
 
 export async function POST(request: Request) {
@@ -29,8 +28,8 @@ export async function POST(request: Request) {
   };
   const existing = await fetch(`${circleHost(apiKey)}/v1/w3s/wallets`, { headers });
   const existingJson = await existing.json().catch(() => ({}));
-  const address = arcAddress(existingJson.data?.wallets);
-  if (address) return NextResponse.json({ address });
+  const found = arcWallet(existingJson.data?.wallets);
+  if (found?.address) return NextResponse.json({ address: found.address, walletId: found.id || "" });
   const initialized = await fetch(`${circleHost(apiKey)}/v1/w3s/user/initialize`, {
     method: "POST",
     headers,
