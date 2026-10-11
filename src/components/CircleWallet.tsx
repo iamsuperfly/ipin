@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { isAddress } from "viem";
 import { CIRCLE_APP_ID } from "@/lib/circle";
 import { supabaseBrowser } from "@/lib/supabase";
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
@@ -111,6 +112,9 @@ export function CircleHost() {
           publish({ note: sdkError(error), busy: false });
           return;
         }
+        window.sessionStorage.setItem("ipin-circle-user", result.userToken);
+        window.sessionStorage.setItem("ipin-circle-key", result.encryptionKey);
+        sdk.setAuthentication({ userToken: result.userToken, encryptionKey: result.encryptionKey });
         router.replace("/account");
         publish({ note: "Google confirmed. Creating the Arc wallet.", busy: true });
         void createWallet(sdk, result.userToken, result.encryptionKey);
@@ -120,15 +124,18 @@ export function CircleHost() {
     window.localStorage.setItem("ipin-circle-ready", "1");
   }, [router]);
 
-  async function listedAddress(headers: Record<string, string>, userToken: string) {
+  async function listed(headers: Record<string, string>, userToken: string) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const listed = await fetch("/api/circle/wallet", {
+      const listedWallet = await fetch("/api/circle/wallet", {
         method: "POST",
         headers,
         body: JSON.stringify({ userToken }),
       });
-      const json = await listed.json().catch(() => ({}));
-      if (json.address) return json.address as string;
+      const json = await listedWallet.json().catch(() => ({}));
+      if (json.address) {
+        if (json.walletId) window.localStorage.setItem("ipin-circle-wallet", json.walletId);
+        return json.address as string;
+      }
       if (json.challengeId) return "";
       await new Promise((resolve) => window.setTimeout(resolve, 1500));
     }
@@ -154,6 +161,7 @@ export function CircleHost() {
       body: JSON.stringify({ userToken }),
     });
     const json = await created.json().catch(() => ({}));
+    if (json.walletId) window.localStorage.setItem("ipin-circle-wallet", json.walletId);
     if (json.address) {
       await finish(json.address);
       return;
@@ -169,7 +177,7 @@ export function CircleHost() {
         publish({ note: sdkError(challengeError), busy: false });
         return;
       }
-      const found = await listedAddress(headers, userToken);
+      const found = await listed(headers, userToken);
       if (!found) {
         publish({ note: "Circle confirmed Google, but no Arc address exists yet.", busy: false });
         return;
@@ -220,8 +228,20 @@ export function CircleHost() {
       }
     };
     const onStart = () => void start();
+    const onExec = (event: Event) => {
+      const sdk = sdkRef.current;
+      const challengeId = (event as CustomEvent<string>).detail;
+      if (!sdk || !challengeId) return;
+      sdk.execute(challengeId, (challengeError) => {
+        publish({ note: challengeError ? sdkError(challengeError) : "Arc wallet confirmed.", busy: false });
+      });
+    };
     window.addEventListener("ipin-circle-start", onStart);
-    return () => window.removeEventListener("ipin-circle-start", onStart);
+    window.addEventListener("ipin-circle-exec", onExec);
+    return () => {
+      window.removeEventListener("ipin-circle-start", onStart);
+      window.removeEventListener("ipin-circle-exec", onExec);
+    };
   }, []);
 
   return null;
@@ -229,6 +249,8 @@ export function CircleHost() {
 
 export function CircleCard() {
   const [local, setLocal] = useState(state);
+  const [to, setTo] = useState("");
+  const [amount, setAmount] = useState("");
 
   useEffect(() => {
     setLocal(state);
@@ -244,6 +266,32 @@ export function CircleCard() {
     publish({ note: "Address copied." });
   }
 
+  async function withdraw() {
+    if (!isAddress(to) || !amount) {
+      publish({ note: "Enter an address and an amount." });
+      return;
+    }
+    const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
+    const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
+    const headers = await authHeaders();
+    if (!headers || !userToken || !walletId) {
+      publish({ note: "Open the Arc wallet once so it can send." });
+      return;
+    }
+    const created = await fetch("/api/circle/tx", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ kind: "transfer", userToken, walletId, to, amount }),
+    });
+    const json = await created.json().catch(() => ({}));
+    if (!created.ok || !json.challengeId) {
+      publish({ note: json.error || "Couldn't send from the Arc wallet." });
+      return;
+    }
+    publish({ note: "Confirm the send in the Arc wallet." });
+    window.dispatchEvent(new CustomEvent("ipin-circle-exec", { detail: json.challengeId }));
+  }
+
   return (
     <div className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
       <p className="text-sm text-mute">{local.note}</p>
@@ -254,7 +302,12 @@ export function CircleCard() {
       )}
       {local.address && <p className="mt-2 text-sm">{local.balance ? `${local.balance} USDC` : "Reading balance."}</p>}
       {local.address ? (
-        <a className="btn-ghost mt-3 block text-center" href={FAUCET} target="_blank" rel="noreferrer">Fund</a>
+        <>
+          <a className="btn-ghost mt-3 block text-center" href={FAUCET} target="_blank" rel="noreferrer">Fund</a>
+          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="Withdraw to 0x" className="mt-3 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono text-sm outline-none focus:border-laterite" />
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" className="mt-3 h-12 w-full rounded-2xl border border-ink/15 bg-ground px-4 font-mono outline-none focus:border-laterite" />
+          <button type="button" className="btn-primary mt-3 w-full" onClick={withdraw}>Withdraw</button>
+        </>
       ) : (
         <button type="button" className="btn-primary mt-3 w-full" disabled={local.busy} onClick={() => window.dispatchEvent(new Event("ipin-circle-start"))}>
           {local.busy ? "Starting" : "Start"}
