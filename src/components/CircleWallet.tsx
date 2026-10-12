@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isAddress } from "viem";
-import { openArcWallet } from "@/lib/arcSession";
+import { openArcWallet, setPending, takePending } from "@/lib/arcSession";
 import { CIRCLE_APP_ID } from "@/lib/circle";
 import { supabaseBrowser } from "@/lib/supabase";
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
@@ -135,19 +135,40 @@ export function CircleHost() {
       const json = await listedWallet.json().catch(() => ({}));
       if (json.address) {
         if (json.walletId) window.localStorage.setItem("ipin-circle-wallet", json.walletId);
-        return json.address as string;
+        return { address: json.address as string, walletId: (json.walletId as string) || "" };
       }
-      if (json.challengeId) return "";
+      if (json.challengeId) return { address: "", walletId: "" };
       await new Promise((resolve) => window.setTimeout(resolve, 1500));
     }
-    return "";
+    return { address: "", walletId: "" };
   }
 
-  async function finish(address: string) {
+  async function resume(sdk: W3SSdk, userToken: string, walletId: string) {
+    const pending = takePending();
+    if (!pending || !walletId) return;
+    const headers = await authHeaders();
+    if (!headers) return;
+    const body = pending.kind === "withdraw"
+      ? { kind: "transfer", userToken, walletId, to: pending.to, amount: pending.amount }
+      : { kind: "contract", userToken, walletId, contractAddress: pending.contractAddress, callData: pending.callData };
+    const created = await fetch("/api/circle/tx", { method: "POST", headers, body: JSON.stringify(body) });
+    const json = await created.json().catch(() => ({}));
+    if (!created.ok || !json.challengeId) {
+      publish({ note: json.error || "Couldn't ask the Arc wallet to sign.", busy: false });
+      return;
+    }
+    publish({ note: "Confirm in the Arc wallet." });
+    sdk.execute(json.challengeId, (challengeError) => {
+      publish({ note: challengeError ? sdkError(challengeError) : "Arc wallet confirmed.", busy: false });
+    });
+  }
+
+  async function finish(sdk: W3SSdk, address: string, userToken: string, walletId: string) {
     const failed = await saveCircle(address);
     const balance = await readBalance(address);
     publish({ address, balance, note: failed || "Arc wallet ready.", busy: false });
     router.replace("/account");
+    if (walletId) await resume(sdk, userToken, walletId);
   }
 
   async function createWallet(sdk: W3SSdk, userToken: string, encryptionKey: string) {
@@ -164,7 +185,7 @@ export function CircleHost() {
     const json = await created.json().catch(() => ({}));
     if (json.walletId) window.localStorage.setItem("ipin-circle-wallet", json.walletId);
     if (json.address) {
-      await finish(json.address);
+      await finish(sdk, json.address, userToken, json.walletId || "");
       return;
     }
     if (!json.challengeId) {
@@ -179,11 +200,11 @@ export function CircleHost() {
         return;
       }
       const found = await listed(headers, userToken);
-      if (!found) {
+      if (!found.address) {
         publish({ note: "Circle confirmed Google, but no Arc address exists yet.", busy: false });
         return;
       }
-      await finish(found);
+      await finish(sdk, found.address, userToken, found.walletId);
     });
   }
 
@@ -276,8 +297,9 @@ export function CircleCard() {
     const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
     const headers = await authHeaders();
     if (!headers || !userToken || !walletId) {
+      setPending({ kind: "withdraw", to, amount });
       openArcWallet();
-      publish({ note: "Opening the Arc wallet. Confirm it, then withdraw again." });
+      publish({ note: "Opening the Arc wallet. It will ask you to confirm the send after." });
       return;
     }
     const created = await fetch("/api/circle/tx", {
