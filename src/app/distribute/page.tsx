@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { decodeEventLog, encodeFunctionData, isAddress } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { openArcWallet } from "@/lib/arcSession";
 import { ipinAbi, erc20Abi } from "@/lib/abi";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
@@ -29,12 +30,13 @@ function split(total: string, rows: Row[]): Row[] {
 
 export default function DistributePage() {
   const router = useRouter();
+  const params = useSearchParams();
   const contract = ipinAddress();
   const client = usePublicClient();
   const { isConnected } = useAccount();
   const [arc, setArc] = useState("");
-  const [name, setName] = useState("");
-  const [total, setTotal] = useState("100");
+  const [name, setName] = useState(params.get("name") || "");
+  const [total, setTotal] = useState(params.get("total") || "100");
   const [rows, setRows] = useState<Row[]>([{ address: "", amount: "50", edited: false }, { address: "", amount: "50", edited: false }]);
   const [note, setNote] = useState("");
   const { writeContract, data: hash, isPending, error } = useWriteContract();
@@ -69,11 +71,11 @@ export default function DistributePage() {
     setRows(split(total, [...rows, { address: "", amount: "0", edited: false }]));
   }
 
-  async function saveCampaign() {
+  async function saveCampaign(potId?: number) {
     const sb = supabaseBrowser();
     const user = sb ? (await sb.auth.getUser()).data.user : null;
     if (sb && user) {
-      await sb.from("campaigns").insert({ account_id: user.id, name: name.trim(), pool_amount: Number(formatUsdc(pool)), status: "waiting" });
+      await sb.from("campaigns").insert({ account_id: user.id, name: name.trim(), pool_amount: Number(formatUsdc(pool)), status: "waiting", pot_id: potId ?? null });
     }
   }
 
@@ -82,7 +84,8 @@ export default function DistributePage() {
     const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
     const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
     if (!userToken || !walletId) {
-      setNote("Open the Arc wallet once so it can sign.");
+      openArcWallet();
+      setNote("Opening the Arc wallet. Confirm it, then create again.");
       return;
     }
     const headers = await (async () => {
@@ -109,6 +112,7 @@ export default function DistributePage() {
       setNote(json.error || "Couldn't ask the Arc wallet to create it.");
       return;
     }
+    await saveCampaign();
     setNote("Confirm in the Arc wallet.");
     window.dispatchEvent(new CustomEvent("ipin-circle-exec", { detail: json.challengeId }));
   }
@@ -117,7 +121,6 @@ export default function DistributePage() {
     if (!contract || !name.trim()) return;
     const members = even.map((r) => r.address.trim());
     if (members.some((m) => !isAddress(m))) return;
-    await saveCampaign();
     if (arc) {
       if (isConnected) {
         setNote("Sending the amount to the Arc wallet. The Arc wallet creates it next.");
@@ -127,12 +130,11 @@ export default function DistributePage() {
           functionName: "transfer",
           args: [arc as `0x${string}`, pool + quote.fee],
         });
-        await circleCreate();
-        return;
       }
       await circleCreate();
       return;
     }
+    await saveCampaign();
     writeContract({
       address: contract,
       abi: ipinAbi,
@@ -163,7 +165,7 @@ export default function DistributePage() {
         ) : isConnected ? (
           <button type="button" className="btn-primary w-full" disabled={!contract || isPending || isLoading} onClick={submit}>{isPending || isLoading ? "Creating\u2026" : "Create distribution"}</button>
         ) : (
-          <Link href="/account" className="btn-primary block text-center">Start the Arc wallet</Link>
+          <button type="button" className="btn-primary w-full" onClick={() => { openArcWallet(); setNote("Opening the Arc wallet."); }}>Start the Arc wallet</button>
         )}
         {isSuccess && <p className="text-sm text-mute">Created. Opening it so you can fund and pay.</p>}
         {note && <p className="text-sm text-mute">{note}</p>}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isAddress } from "viem";
+import { openArcWallet } from "@/lib/arcSession";
 import { CIRCLE_APP_ID } from "@/lib/circle";
 import { supabaseBrowser } from "@/lib/supabase";
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
@@ -275,7 +276,8 @@ export function CircleCard() {
     const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
     const headers = await authHeaders();
     if (!headers || !userToken || !walletId) {
-      publish({ note: "Open the Arc wallet once so it can send." });
+      openArcWallet();
+      publish({ note: "Opening the Arc wallet. Confirm it, then withdraw again." });
       return;
     }
     const created = await fetch("/api/circle/tx", {
