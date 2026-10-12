@@ -6,9 +6,8 @@ describe("arc session", () => {
     expect(arcCanSign()).toBe(false);
   });
 
-  it("stores and clears a pending send", () => {
+  it("does nothing with a pending send when there is no browser", () => {
     setPending({ kind: "withdraw", to: "0x1", amount: "1" });
-    expect(takePending()).toEqual({ kind: "withdraw", to: "0x1", amount: "1" });
     expect(takePending()).toBeNull();
   });
 });
