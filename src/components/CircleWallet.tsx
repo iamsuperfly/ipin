@@ -58,6 +58,25 @@ function sdkError(error: unknown) {
   }
 }
 
+function challengeResult(result: unknown) {
+  const value = result as { status?: string; type?: string } | null;
+  if (!value) return "Arc wallet confirmed.";
+  if (value.status === "FAILED" || value.status === "EXPIRED") return "The Arc wallet did not finish. Try again.";
+  return "Arc wallet confirmed.";
+}
+
+function storedAuth() {
+  return {
+    userToken: window.sessionStorage.getItem("ipin-circle-user") || "",
+    encryptionKey: window.sessionStorage.getItem("ipin-circle-key") || "",
+  };
+}
+
+function rememberAuth(userToken: string, encryptionKey: string) {
+  window.sessionStorage.setItem("ipin-circle-user", userToken);
+  window.sessionStorage.setItem("ipin-circle-key", encryptionKey);
+}
+
 async function authHeaders() {
   const supabase = supabaseBrowser();
   const session = supabase ? (await supabase.auth.getSession()).data.session : null;
@@ -113,8 +132,7 @@ export function CircleHost() {
           publish({ note: sdkError(error), busy: false });
           return;
         }
-        window.sessionStorage.setItem("ipin-circle-user", result.userToken);
-        window.sessionStorage.setItem("ipin-circle-key", result.encryptionKey);
+        rememberAuth(result.userToken, result.encryptionKey);
         sdk.setAuthentication({ userToken: result.userToken, encryptionKey: result.encryptionKey });
         router.replace("/account");
         publish({ note: "Google confirmed. Creating the Arc wallet.", busy: true });
@@ -124,6 +142,25 @@ export function CircleHost() {
     sdkRef.current = sdk;
     window.localStorage.setItem("ipin-circle-ready", "1");
   }, [router]);
+
+  function runChallenge(sdk: W3SSdk, challengeId: string) {
+    const auth = storedAuth();
+    if (!auth.userToken || !auth.encryptionKey) {
+      publish({ note: "Open the Arc wallet once so it can sign.", busy: false });
+      return;
+    }
+    sdk.setAuthentication(auth);
+    publish({ note: "Confirm in the Arc wallet.", busy: true });
+    sdk.execute(challengeId, async (challengeError, result) => {
+      if (challengeError) {
+        publish({ note: sdkError(challengeError), busy: false });
+        return;
+      }
+      const address = window.localStorage.getItem("ipin-circle-address") || "";
+      const balance = address ? await readBalance(address) : "";
+      publish({ balance, note: challengeResult(result), busy: false });
+    });
+  }
 
   async function listed(headers: Record<string, string>, userToken: string) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -157,10 +194,7 @@ export function CircleHost() {
       publish({ note: json.error || "Couldn't ask the Arc wallet to sign.", busy: false });
       return;
     }
-    publish({ note: "Confirm in the Arc wallet." });
-    sdk.execute(json.challengeId, (challengeError) => {
-      publish({ note: challengeError ? sdkError(challengeError) : "Arc wallet confirmed.", busy: false });
-    });
+    runChallenge(sdk, json.challengeId);
   }
 
   async function finish(sdk: W3SSdk, address: string, userToken: string, walletId: string) {
@@ -254,9 +288,7 @@ export function CircleHost() {
       const sdk = sdkRef.current;
       const challengeId = (event as CustomEvent<string>).detail;
       if (!sdk || !challengeId) return;
-      sdk.execute(challengeId, (challengeError) => {
-        publish({ note: challengeError ? sdkError(challengeError) : "Arc wallet confirmed.", busy: false });
-      });
+      runChallenge(sdk, challengeId);
     };
     window.addEventListener("ipin-circle-start", onStart);
     window.addEventListener("ipin-circle-exec", onExec);
@@ -294,9 +326,10 @@ export function CircleCard() {
       return;
     }
     const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
+    const encryptionKey = window.sessionStorage.getItem("ipin-circle-key") || "";
     const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
     const headers = await authHeaders();
-    if (!headers || !userToken || !walletId) {
+    if (!headers || !userToken || !encryptionKey || !walletId) {
       setPending({ kind: "withdraw", to, amount });
       openArcWallet();
       publish({ note: "Opening the Arc wallet. It will ask you to confirm the send after." });
