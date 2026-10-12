@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { decodeEventLog, encodeFunctionData, isAddress } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
-import { openArcWallet } from "@/lib/arcSession";
+import { openArcWallet, setPending } from "@/lib/arcSession";
 import { ipinAbi, erc20Abi } from "@/lib/abi";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
@@ -79,13 +79,23 @@ export default function DistributePage() {
     }
   }
 
+  function createCallData() {
+    return encodeFunctionData({
+      abi: ipinAbi,
+      functionName: "createPot",
+      args: [name.trim(), USDC, even.map((row) => row.address.trim() as `0x${string}`), even.map((row) => parseUsdc(row.amount || "0"))],
+    });
+  }
+
   async function circleCreate() {
     if (!contract) return;
     const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
     const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
+    const callData = createCallData();
     if (!userToken || !walletId) {
+      setPending({ kind: "create", name: name.trim(), contractAddress: contract, callData });
       openArcWallet();
-      setNote("Opening the Arc wallet. Confirm it, then create again.");
+      setNote("Opening the Arc wallet. It will ask you to confirm the create after.");
       return;
     }
     const headers = await (async () => {
@@ -97,11 +107,6 @@ export default function DistributePage() {
       setNote("Sign in before creating a distribution.");
       return;
     }
-    const callData = encodeFunctionData({
-      abi: ipinAbi,
-      functionName: "createPot",
-      args: [name.trim(), USDC, even.map((row) => row.address.trim() as `0x${string}`), even.map((row) => parseUsdc(row.amount || "0"))],
-    });
     const created = await fetch("/api/circle/tx", {
       method: "POST",
       headers,
