@@ -163,7 +163,8 @@ export default function AccountPage() {
           {waiting.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">Nothing waiting.</li>}
           {waiting.map((r) => (
             <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
-              {r.pot_id ? <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link> : <div className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>}
+              <Link href={r.pot_id ? `/pot/${r.pot_id}` : `/distribute?name=${encodeURIComponent(r.name)}&total=${r.pool_amount}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
+              {!r.pot_id && <p className="mt-1 text-sm text-mute">Not created yet.</p>}
               <button type="button" className="mt-3 text-sm text-danger" onClick={() => remove(r.id)}>Delete</button>
             </li>
           ))}
@@ -175,7 +176,7 @@ export default function AccountPage() {
           {done.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">None completed yet.</li>}
           {done.map((r) => (
             <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
-              {r.pot_id ? <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link> : <div className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>}
+              {r.pot_id ? <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link> : <Link href={`/distribute?name=${encodeURIComponent(r.name)}&total=${r.pool_amount}`} className="flex items-center justify-between"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>}
             </li>
           ))}
         </ul>
@@ -190,7 +191,7 @@ export default function AccountPage() {
         <button type="button" className="btn-ghost w-full" onClick={attach} disabled={!isConnected}>Attach connected wallet</button>
         {wallets.map((w) => (
           <div key={w.id} className="flex items-center justify-between rounded-2xl border border-ink/10 bg-panel px-4 py-3">
-            <span className="font-mono text-sm">{shortAddr(w.address)}{w.kind === "circle" ? " · Arc" : ""}</span>
+            <span className="font-mono text-sm">{shortAddr(w.address)}{w.kind === "circle" ? " \u00b7 Arc" : ""}</span>
             {w.kind === "circle" || w.is_active ? <span className="text-sm text-laterite">Active</span> : <button type="button" className="btn-ghost h-11 px-4 text-sm" onClick={() => makeActive(w.id)}>Make active</button>}
           </div>
         ))}
