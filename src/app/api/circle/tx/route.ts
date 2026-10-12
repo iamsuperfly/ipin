@@ -39,6 +39,7 @@ export async function POST(request: Request) {
         tokenAddress: "0x3600000000000000000000000000000000000000",
         blockchain: "ARC-TESTNET",
         feeLevel: "MEDIUM",
+        gasLimit: "100000",
       }
     : {
         idempotencyKey: crypto.randomUUID(),
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
         contractAddress: body.contractAddress,
         callData: body.callData,
         feeLevel: "MEDIUM",
+        gasLimit: "500000",
       };
   const created = await fetch(`${circleHost(apiKey)}/v1/w3s/user/transactions/${path}`, {
     method: "POST",

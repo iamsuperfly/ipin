@@ -48,12 +48,8 @@ export default function DistributionsPage() {
           {waiting.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">Nothing waiting.</li>}
           {waiting.map((r) => (
             <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
-              {r.pot_id ? (
-                <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between gap-3"><span className="font-medium">{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
-              ) : (
-                <div className="flex items-center justify-between gap-3"><span className="font-medium">{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>
-              )}
-              {!r.pot_id && <p className="mt-2 text-sm text-mute">Not on Arc yet. Create it again to fund and pay.</p>}
+              <Link href={r.pot_id ? `/pot/${r.pot_id}` : `/distribute?name=${encodeURIComponent(r.name)}&total=${r.pool_amount}`} className="flex items-center justify-between gap-3"><span className="font-medium">{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
+              {!r.pot_id && <p className="mt-2 text-sm text-mute">Not on Arc yet. Open it to create it.</p>}
               <button type="button" className="mt-3 text-sm text-danger" onClick={() => remove(r.id)}>Delete</button>
             </li>
           ))}
@@ -65,11 +61,7 @@ export default function DistributionsPage() {
           {done.length === 0 && <li className="rounded-2xl border border-ink/10 bg-panel px-4 py-4 text-sm text-mute">None completed yet.</li>}
           {done.map((r) => (
             <li key={r.id} className="rounded-2xl border border-ink/10 bg-panel px-4 py-4">
-              {r.pot_id ? (
-                <Link href={`/pot/${r.pot_id}`} className="flex items-center justify-between gap-3"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
-              ) : (
-                <div className="flex items-center justify-between gap-3"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></div>
-              )}
+              <Link href={r.pot_id ? `/pot/${r.pot_id}` : `/distribute?name=${encodeURIComponent(r.name)}&total=${r.pool_amount}`} className="flex items-center justify-between gap-3"><span>{r.name}</span><span className="font-mono text-sm">{r.pool_amount} USDC</span></Link>
             </li>
           ))}
         </ul>
