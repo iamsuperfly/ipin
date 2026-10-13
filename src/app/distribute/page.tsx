@@ -130,15 +130,39 @@ export default function DistributePage() {
     };
   }
 
+  async function refreshWalletId(userToken: string): Promise<string> {
+    const sb = supabaseBrowser();
+    const session = sb ? (await sb.auth.getSession()).data.session : null;
+    if (!session) return "";
+    const listed = await fetch("/api/circle/wallet", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ userToken }),
+    });
+    const json = await listed.json().catch(() => ({}));
+    const fresh = (json.walletId as string) || "";
+    if (fresh) window.localStorage.setItem("ipin-circle-wallet", fresh);
+    if (json.address) window.localStorage.setItem("ipin-circle-address", json.address);
+    return fresh;
+  }
+
   async function circleCreate() {
     if (!contract) return;
     const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
-    const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
+    let walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
     const params = createParams();
-    if (!userToken || !walletId) {
+    if (!userToken) {
       setPending({ kind: "create", name: name.trim(), contractAddress: contract, ...params });
       openArcWallet();
       setNote("Opening the Arc wallet. It will ask you to confirm the create after.");
+      return;
+    }
+    const fresh = await refreshWalletId(userToken);
+    if (fresh) walletId = fresh;
+    if (!walletId) {
+      setPending({ kind: "create", name: name.trim(), contractAddress: contract, ...params });
+      openArcWallet();
+      setNote("Opening the Arc wallet so it can sign.");
       return;
     }
     const headers = await (async () => {
@@ -157,7 +181,11 @@ export default function DistributePage() {
     });
     const json = await created.json().catch(() => ({}));
     if (!created.ok || !json.challengeId) {
-      setNote(json.error || "Couldn't ask the Arc wallet to create it.");
+      const raw = json.error || "";
+      const friendly = /cannot find target wallet/i.test(raw)
+        ? "The Arc wallet is not ready. Open it once, then try again."
+        : raw || "Couldn't ask the Arc wallet to create it.";
+      setNote(friendly);
       return;
     }
     await saveCampaign();
