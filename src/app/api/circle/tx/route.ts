@@ -18,6 +18,8 @@ export async function POST(request: Request) {
     kind?: "contract" | "transfer";
     contractAddress?: string;
     callData?: string;
+    abiFunctionSignature?: string;
+    abiParameters?: unknown[];
     to?: string;
     amount?: string;
   };
@@ -30,6 +32,24 @@ export async function POST(request: Request) {
     "X-User-Token": body.userToken,
   };
   const path = body.kind === "transfer" ? "transfer" : "contractExecution";
+  const contract = body.abiFunctionSignature
+    ? {
+        idempotencyKey: crypto.randomUUID(),
+        walletId: body.walletId,
+        contractAddress: body.contractAddress,
+        abiFunctionSignature: body.abiFunctionSignature,
+        abiParameters: body.abiParameters,
+        blockchain: "ARC-TESTNET",
+        feeLevel: "MEDIUM",
+      }
+    : {
+        idempotencyKey: crypto.randomUUID(),
+        walletId: body.walletId,
+        contractAddress: body.contractAddress,
+        callData: body.callData,
+        blockchain: "ARC-TESTNET",
+        feeLevel: "MEDIUM",
+      };
   const payload = body.kind === "transfer"
     ? {
         idempotencyKey: crypto.randomUUID(),
@@ -40,13 +60,7 @@ export async function POST(request: Request) {
         blockchain: "ARC-TESTNET",
         feeLevel: "MEDIUM",
       }
-    : {
-        idempotencyKey: crypto.randomUUID(),
-        walletId: body.walletId,
-        contractAddress: body.contractAddress,
-        callData: body.callData,
-        feeLevel: "MEDIUM",
-      };
+    : contract;
   const created = await fetch(`${circleHost(apiKey)}/v1/w3s/user/transactions/${path}`, {
     method: "POST",
     headers,

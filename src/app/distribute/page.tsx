@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { decodeEventLog, encodeFunctionData, isAddress } from "viem";
+import { decodeEventLog, isAddress } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { openArcWallet, setPending } from "@/lib/arcSession";
 import { ipinAbi, erc20Abi } from "@/lib/abi";
@@ -79,21 +79,25 @@ export default function DistributePage() {
     }
   }
 
-  function createCallData() {
-    return encodeFunctionData({
-      abi: ipinAbi,
-      functionName: "createPot",
-      args: [name.trim(), USDC, even.map((row) => row.address.trim() as `0x${string}`), even.map((row) => parseUsdc(row.amount || "0"))],
-    });
+  function createParams() {
+    return {
+      abiFunctionSignature: "createPot(string,address,address[],uint96[])",
+      abiParameters: [
+        name.trim(),
+        USDC,
+        even.map((row) => row.address.trim()),
+        even.map((row) => parseUsdc(row.amount || "0").toString()),
+      ],
+    };
   }
 
   async function circleCreate() {
     if (!contract) return;
     const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
     const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
-    const callData = createCallData();
+    const params = createParams();
     if (!userToken || !walletId) {
-      setPending({ kind: "create", name: name.trim(), contractAddress: contract, callData });
+      setPending({ kind: "create", name: name.trim(), contractAddress: contract, ...params });
       openArcWallet();
       setNote("Opening the Arc wallet. It will ask you to confirm the create after.");
       return;
@@ -110,7 +114,7 @@ export default function DistributePage() {
     const created = await fetch("/api/circle/tx", {
       method: "POST",
       headers,
-      body: JSON.stringify({ kind: "contract", userToken, walletId, contractAddress: contract, callData }),
+      body: JSON.stringify({ kind: "contract", userToken, walletId, contractAddress: contract, ...params }),
     });
     const json = await created.json().catch(() => ({}));
     if (!created.ok || !json.challengeId) {
@@ -118,24 +122,18 @@ export default function DistributePage() {
       return;
     }
     await saveCampaign();
-    setNote("Confirm in the Arc wallet.");
+    setNote("Confirm in the Arc wallet. The amount is inside the pot, not a transfer.");
     window.dispatchEvent(new CustomEvent("ipin-circle-exec", { detail: json.challengeId }));
   }
 
   async function submit() {
     if (!contract || !name.trim()) return;
     const members = even.map((r) => r.address.trim());
-    if (members.some((m) => !isAddress(m))) return;
+    if (members.some((m) => !isAddress(m))) {
+      setNote("Every recipient needs a real address.");
+      return;
+    }
     if (arc) {
-      if (isConnected) {
-        setNote("Sending the amount to the Arc wallet. The Arc wallet creates it next.");
-        writeContract({
-          address: USDC,
-          abi: erc20Abi,
-          functionName: "transfer",
-          args: [arc as `0x${string}`, pool + quote.fee],
-        });
-      }
       await circleCreate();
       return;
     }
