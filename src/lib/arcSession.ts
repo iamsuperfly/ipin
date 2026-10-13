@@ -1,6 +1,12 @@
 export type Pending =
   | { kind: "withdraw"; to: string; amount: string }
-  | { kind: "create"; name: string; contractAddress: string; callData: string };
+  | {
+      kind: "create";
+      name: string;
+      contractAddress: string;
+      abiFunctionSignature: string;
+      abiParameters: unknown[];
+    };
 
 const PENDING = "ipin-circle-pending";
 
