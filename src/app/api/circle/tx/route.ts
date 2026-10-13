@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     userToken?: string;
     walletId?: string;
-    kind?: "contract" | "transfer";
+    kind?: "contract" | "transfer" | "status";
     contractAddress?: string;
     callData?: string;
     abiFunctionSignature?: string;
@@ -31,6 +31,14 @@ export async function POST(request: Request) {
     "Content-Type": "application/json",
     "X-User-Token": body.userToken,
   };
+  if (body.kind === "status") {
+    const listed = await fetch(`${circleHost(apiKey)}/v1/w3s/transactions?walletIds=${body.walletId}&operation=CONTRACT_EXECUTION&pageSize=5&order=DESC`, {
+      headers: { Authorization: `Bearer ${apiKey}`, "X-User-Token": body.userToken },
+    });
+    const json = await listed.json().catch(() => ({}));
+    const tx = Array.isArray(json.data?.transactions) ? json.data.transactions[0] : null;
+    return NextResponse.json({ hash: tx?.txHash || "", state: tx?.state || "" });
+  }
   const path = body.kind === "transfer" ? "transfer" : "contractExecution";
   const contract = body.abiFunctionSignature
     ? {
