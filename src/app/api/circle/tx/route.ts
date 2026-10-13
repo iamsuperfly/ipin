@@ -39,7 +39,6 @@ export async function POST(request: Request) {
         contractAddress: body.contractAddress,
         abiFunctionSignature: body.abiFunctionSignature,
         abiParameters: body.abiParameters,
-        blockchain: "ARC-TESTNET",
         feeLevel: "MEDIUM",
       }
     : {
@@ -47,7 +46,6 @@ export async function POST(request: Request) {
         walletId: body.walletId,
         contractAddress: body.contractAddress,
         callData: body.callData,
-        blockchain: "ARC-TESTNET",
         feeLevel: "MEDIUM",
       };
   const payload = body.kind === "transfer"
