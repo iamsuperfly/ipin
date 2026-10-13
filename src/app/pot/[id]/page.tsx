@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { encodeFunctionData, isAddress } from "viem";
+import { isAddress } from "viem";
 import {
   useAccount,
   useReadContract,
@@ -114,11 +114,18 @@ export default function PotPage() {
       setNote("Open the Arc wallet once so it can sign.");
       return;
     }
-    const callData = encodeFunctionData({ abi: ipinAbi, functionName, args: args as never });
+    const signature = functionName === "fund" ? "fund(uint256,uint256)" : "payAll(uint256)";
     const created = await fetch("/api/circle/tx", {
       method: "POST",
       headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "contract", userToken, walletId, contractAddress: contract, callData }),
+      body: JSON.stringify({
+        kind: "contract",
+        userToken,
+        walletId,
+        contractAddress: contract,
+        abiFunctionSignature: signature,
+        abiParameters: args.map((value) => value.toString()),
+      }),
     });
     const json = await created.json().catch(() => ({}));
     if (!created.ok || !json.challengeId) {
