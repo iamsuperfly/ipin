@@ -124,7 +124,7 @@ export default function PotPage() {
         walletId,
         contractAddress: contract,
         abiFunctionSignature: signature,
-        abiParameters: args.map((value) => value.toString()),
+        abiParameters: args.map((value) => String(value)),
       }),
     });
     const json = await created.json().catch(() => ({}));
