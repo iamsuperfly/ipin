@@ -104,13 +104,41 @@ export default function PotPage() {
     }
   }, [isSuccess, hash, action, amount, contract, id, pot, roster, walletUsdc, allowance]);
 
+  async function refreshWalletId(userToken: string): Promise<string> {
+    const sb = supabaseBrowser();
+    const session = sb ? (await sb.auth.getSession()).data.session : null;
+    if (!session) return "";
+    const listed = await fetch("/api/circle/wallet", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ userToken }),
+    });
+    const json = await listed.json().catch(() => ({}));
+    const fresh = (json.walletId as string) || "";
+    if (fresh) window.localStorage.setItem("ipin-circle-wallet", fresh);
+    if (json.address) window.localStorage.setItem("ipin-circle-address", json.address);
+    return fresh;
+  }
+
+  function friendly(raw: string) {
+    return /cannot find target wallet/i.test(raw)
+      ? "The Arc wallet is not ready. Open it once, then try again."
+      : raw;
+  }
+
   async function circleCall(functionName: "fund" | "payAll", args: readonly unknown[]) {
     if (!contract) return;
     const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
-    const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
+    let walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
     const sb = supabaseBrowser();
     const session = sb ? (await sb.auth.getSession()).data.session : null;
-    if (!session || !userToken || !walletId) {
+    if (!session || !userToken) {
+      setNote("Open the Arc wallet once so it can sign.");
+      return;
+    }
+    const fresh = await refreshWalletId(userToken);
+    if (fresh) walletId = fresh;
+    if (!walletId) {
       setNote("Open the Arc wallet once so it can sign.");
       return;
     }
@@ -129,7 +157,7 @@ export default function PotPage() {
     });
     const json = await created.json().catch(() => ({}));
     if (!created.ok || !json.challengeId) {
-      setNote(json.error || "Couldn't ask the Arc wallet to sign.");
+      setNote(friendly(json.error || "Couldn't ask the Arc wallet to sign."));
       return;
     }
     setNote("Confirm in the Arc wallet.");
@@ -142,10 +170,16 @@ export default function PotPage() {
       return;
     }
     const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
-    const walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
+    let walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
     const sb = supabaseBrowser();
     const session = sb ? (await sb.auth.getSession()).data.session : null;
-    if (!session || !userToken || !walletId) {
+    if (!session || !userToken) {
+      setNote("Open the Arc wallet once so it can send.");
+      return;
+    }
+    const fresh = await refreshWalletId(userToken);
+    if (fresh) walletId = fresh;
+    if (!walletId) {
       setNote("Open the Arc wallet once so it can send.");
       return;
     }
@@ -156,7 +190,7 @@ export default function PotPage() {
     });
     const json = await created.json().catch(() => ({}));
     if (!created.ok || !json.challengeId) {
-      setNote(json.error || "Couldn't send from the Arc wallet.");
+      setNote(friendly(json.error || "Couldn't send from the Arc wallet."));
       return;
     }
     setNote("Confirm the send in the Arc wallet.");
