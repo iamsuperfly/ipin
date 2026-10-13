@@ -4,6 +4,11 @@ import { signedIn } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
+function plain(message: string) {
+  if (/cannot find target wallet/i.test(message)) return "The Arc wallet is not ready. Open it once, then try again.";
+  return message;
+}
+
 export async function POST(request: Request) {
   if (!(await signedIn(request))) {
     return NextResponse.json({ error: "Sign in before the Arc wallet can sign." }, { status: 401 });
@@ -74,7 +79,7 @@ export async function POST(request: Request) {
   });
   const json = await created.json().catch(() => ({}));
   if (!created.ok || !json.data?.challengeId) {
-    return NextResponse.json({ error: json.message || circleFailure(created.status) }, { status: 502 });
+    return NextResponse.json({ error: plain(json.message || circleFailure(created.status)) }, { status: 502 });
   }
   return NextResponse.json({ challengeId: json.data.challengeId });
 }
