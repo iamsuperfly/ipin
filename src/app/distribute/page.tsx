@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { decodeEventLog, isAddress } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { openArcWallet, setPending } from "@/lib/arcSession";
-import { ipinAbi, erc20Abi } from "@/lib/abi";
+import { ipinAbi } from "@/lib/abi";
 import { ipinAddress } from "@/lib/contract";
 import { writeErrorText } from "@/lib/errors";
 import { quoteFee } from "@/lib/fee";
@@ -71,12 +70,52 @@ export default function DistributePage() {
     setRows(split(total, [...rows, { address: "", amount: "0", edited: false }]));
   }
 
-  async function saveCampaign(potId?: number) {
+  async function linkPot(potId: number) {
+    const sb = supabaseBrowser();
+    const user = sb ? (await sb.auth.getUser()).data.user : null;
+    if (!sb || !user) return;
+    await sb.from("campaigns").update({ pot_id: potId, status: "waiting" }).eq("account_id", user.id).eq("name", name.trim()).is("pot_id", null);
+  }
+
+  async function saveCampaign() {
     const sb = supabaseBrowser();
     const user = sb ? (await sb.auth.getUser()).data.user : null;
     if (sb && user) {
-      await sb.from("campaigns").insert({ account_id: user.id, name: name.trim(), pool_amount: Number(formatUsdc(pool)), status: "waiting", pot_id: potId ?? null });
+      await sb.from("campaigns").insert({ account_id: user.id, name: name.trim(), pool_amount: Number(formatUsdc(pool)), status: "waiting", pot_id: null });
     }
+  }
+
+  async function finishCircle(userToken: string, walletId: string) {
+    if (!client) return;
+    const sb = supabaseBrowser();
+    const session = sb ? (await sb.auth.getSession()).data.session : null;
+    if (!session) return;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const status = await fetch("/api/circle/tx", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "status", userToken, walletId }),
+      });
+      const json = await status.json().catch(() => ({}));
+      if (json.hash) {
+        const receipt = await client.getTransactionReceipt({ hash: json.hash as `0x${string}` }).catch(() => null);
+        if (receipt) {
+          const created = receipt.logs
+            .map((log) => {
+              try { return decodeEventLog({ abi: ipinAbi, data: log.data, topics: log.topics }); } catch { return null; }
+            })
+            .find((log) => log?.eventName === "PotCreated");
+          const potId = created && "args" in created ? Number(created.args.id) : null;
+          if (potId != null) {
+            await linkPot(potId);
+            router.replace(`/pot/${potId}`);
+            return;
+          }
+        }
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    }
+    setNote("The Arc wallet confirmed, but the pot is not on Arc yet. Try again.");
   }
 
   function createParams() {
@@ -122,8 +161,9 @@ export default function DistributePage() {
       return;
     }
     await saveCampaign();
-    setNote("Confirm in the Arc wallet. The amount is inside the pot, not a transfer.");
+    setNote("Confirm in the Arc wallet.");
     window.dispatchEvent(new CustomEvent("ipin-circle-exec", { detail: json.challengeId }));
+    window.setTimeout(() => void finishCircle(userToken, walletId), 3000);
   }
 
   async function submit() {
