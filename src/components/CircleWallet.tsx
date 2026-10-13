@@ -187,7 +187,14 @@ export function CircleHost() {
     if (!headers) return;
     const body = pending.kind === "withdraw"
       ? { kind: "transfer", userToken, walletId, to: pending.to, amount: pending.amount }
-      : { kind: "contract", userToken, walletId, contractAddress: pending.contractAddress, callData: pending.callData };
+      : {
+          kind: "contract",
+          userToken,
+          walletId,
+          contractAddress: pending.contractAddress,
+          abiFunctionSignature: pending.abiFunctionSignature,
+          abiParameters: pending.abiParameters,
+        };
     const created = await fetch("/api/circle/tx", { method: "POST", headers, body: JSON.stringify(body) });
     const json = await created.json().catch(() => ({}));
     if (!created.ok || !json.challengeId) {
