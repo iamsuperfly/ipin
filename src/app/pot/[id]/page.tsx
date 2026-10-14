@@ -11,6 +11,7 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { ConnectButton } from "@/components/ConnectButton";
+import { openArcWallet, setPending } from "@/lib/arcSession";
 import { erc20Abi, ipinAbi } from "@/lib/abi";
 import { explorerAddress, explorerTx } from "@/lib/chain";
 import { ipinAddress } from "@/lib/contract";
@@ -141,23 +142,35 @@ export default function PotPage() {
       : raw;
   }
 
+  function needArc(kind: "fund" | "pay", signature: string, args: readonly unknown[]) {
+    if (!contract) return;
+    setPending({
+      kind,
+      contractAddress: contract,
+      abiFunctionSignature: signature,
+      abiParameters: args.map((value) => String(value)),
+    });
+    openArcWallet();
+    setNote("Opening the Arc wallet. Confirm it, then it will sign.");
+  }
+
   async function circleCall(functionName: "fund" | "payAll", args: readonly unknown[]) {
     if (!contract) return;
     const userToken = window.sessionStorage.getItem("ipin-circle-user") || "";
     let walletId = window.localStorage.getItem("ipin-circle-wallet") || "";
     const sb = supabaseBrowser();
     const session = sb ? (await sb.auth.getSession()).data.session : null;
+    const signature = functionName === "fund" ? "fund(uint256,uint256)" : "payAll(uint256)";
     if (!session || !userToken) {
-      setNote("Open the Arc wallet once so it can sign.");
+      needArc(functionName === "fund" ? "fund" : "pay", signature, args);
       return;
     }
     const fresh = await refreshWalletId(userToken);
     if (fresh) walletId = fresh;
     if (!walletId) {
-      setNote("Open the Arc wallet once so it can sign.");
+      needArc(functionName === "fund" ? "fund" : "pay", signature, args);
       return;
     }
-    const signature = functionName === "fund" ? "fund(uint256,uint256)" : "payAll(uint256)";
     const created = await fetch("/api/circle/tx", {
       method: "POST",
       headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
@@ -189,13 +202,17 @@ export default function PotPage() {
     const sb = supabaseBrowser();
     const session = sb ? (await sb.auth.getSession()).data.session : null;
     if (!session || !userToken) {
-      setNote("Open the Arc wallet once so it can send.");
+      setPending({ kind: "withdraw", to: withdrawTo, amount: withdrawAmount });
+      openArcWallet();
+      setNote("Opening the Arc wallet. Confirm it, then it will send.");
       return;
     }
     const fresh = await refreshWalletId(userToken);
     if (fresh) walletId = fresh;
     if (!walletId) {
-      setNote("Open the Arc wallet once so it can send.");
+      setPending({ kind: "withdraw", to: withdrawTo, amount: withdrawAmount });
+      openArcWallet();
+      setNote("Opening the Arc wallet. Confirm it, then it will send.");
       return;
     }
     const created = await fetch("/api/circle/tx", {
