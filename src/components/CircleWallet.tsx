@@ -141,24 +141,39 @@ export function CircleHost() {
     );
     sdkRef.current = sdk;
     window.localStorage.setItem("ipin-circle-ready", "1");
+    // Establish the Circle iframe session early so later execute calls work.
+    void sdk.getDeviceId().catch(() => undefined);
   }, [router]);
 
-  function runChallenge(sdk: W3SSdk, challengeId: string) {
+  async function runChallenge(sdk: W3SSdk, challengeId: string) {
     const auth = storedAuth();
     if (!auth.userToken || !auth.encryptionKey) {
       publish({ note: "Open the Arc wallet once so it can sign.", busy: false });
+      window.dispatchEvent(new CustomEvent("ipin-circle-result", { detail: { ok: false, note: "Open the Arc wallet once so it can sign." } }));
+      return;
+    }
+    try {
+      // Must open the device session or execute fails silently.
+      await sdk.getDeviceId();
+    } catch {
+      publish({ note: "Couldn't reach Circle. Try again.", busy: false });
+      window.dispatchEvent(new CustomEvent("ipin-circle-result", { detail: { ok: false, note: "Couldn't reach Circle. Try again." } }));
       return;
     }
     sdk.setAuthentication(auth);
     publish({ note: "Confirm in the Arc wallet.", busy: true });
     sdk.execute(challengeId, async (challengeError, result) => {
       if (challengeError) {
-        publish({ note: sdkError(challengeError), busy: false });
+        const note = sdkError(challengeError);
+        publish({ note, busy: false });
+        window.dispatchEvent(new CustomEvent("ipin-circle-result", { detail: { ok: false, note } }));
         return;
       }
       const address = window.localStorage.getItem("ipin-circle-address") || "";
       const balance = address ? await readBalance(address) : "";
-      publish({ balance, note: challengeResult(result), busy: false });
+      const note = challengeResult(result);
+      publish({ balance, note, busy: false });
+      window.dispatchEvent(new CustomEvent("ipin-circle-result", { detail: { ok: true, note, result } }));
     });
   }
 
@@ -201,7 +216,7 @@ export function CircleHost() {
       publish({ note: json.error || "Couldn't ask the Arc wallet to sign.", busy: false });
       return;
     }
-    runChallenge(sdk, json.challengeId);
+    await runChallenge(sdk, json.challengeId);
   }
 
   async function finish(sdk: W3SSdk, address: string, userToken: string, walletId: string) {
@@ -295,7 +310,7 @@ export function CircleHost() {
       const sdk = sdkRef.current;
       const challengeId = (event as CustomEvent<string>).detail;
       if (!sdk || !challengeId) return;
-      runChallenge(sdk, challengeId);
+      void runChallenge(sdk, challengeId);
     };
     window.addEventListener("ipin-circle-start", onStart);
     window.addEventListener("ipin-circle-exec", onExec);
