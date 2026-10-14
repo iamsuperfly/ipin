@@ -104,6 +104,21 @@ export default function PotPage() {
     }
   }, [isSuccess, hash, action, amount, contract, id, pot, roster, walletUsdc, allowance]);
 
+  useEffect(() => {
+    const onResult = (event: Event) => {
+      const detail = (event as CustomEvent<{ ok?: boolean; note?: string }>).detail;
+      if (!detail) return;
+      setNote(detail.note || (detail.ok ? "Arc wallet confirmed." : "The Arc wallet did not finish."));
+      if (detail.ok) {
+        pot.refetch();
+        roster.refetch();
+        walletUsdc.refetch();
+      }
+    };
+    window.addEventListener("ipin-circle-result", onResult);
+    return () => window.removeEventListener("ipin-circle-result", onResult);
+  }, [pot, roster, walletUsdc]);
+
   async function refreshWalletId(userToken: string): Promise<string> {
     const sb = supabaseBrowser();
     const session = sb ? (await sb.auth.getSession()).data.session : null;
