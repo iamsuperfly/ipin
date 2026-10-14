@@ -6,6 +6,12 @@ export type Pending =
       contractAddress: string;
       abiFunctionSignature: string;
       abiParameters: unknown[];
+    }
+  | {
+      kind: "fund" | "pay";
+      contractAddress: string;
+      abiFunctionSignature: string;
+      abiParameters: unknown[];
     };
 
 const PENDING = "ipin-circle-pending";
